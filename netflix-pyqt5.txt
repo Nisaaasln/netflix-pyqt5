@@ -43,7 +43,7 @@ class VideoOynatici(QWidget):
         kontrol_widget = QWidget()
         kontrol_widget.setStyleSheet("background: #111; padding: 8px;")
         kontrol_layout = QHBoxLayout()
-        self.oynat_btn = QPushButton("⏸ Durdur")
+        self.oynat_btn = QPushButton("Durdur")
         self.oynat_btn.setStyleSheet("background: #E50914; color: white; padding: 8px 16px; border-radius: 4px; font-weight: bold;")
         self.oynat_btn.clicked.connect(self.oynat_durdur)
         self.ilerleme = QSlider(Qt.Horizontal)
@@ -52,7 +52,7 @@ class VideoOynatici(QWidget):
         self.ilerleme.sliderMoved.connect(self.pozisyon_degistir)
         self.sure_label = QLabel("00:00 / 00:00")
         self.sure_label.setStyleSheet("color: white; font-size: 12px;")
-        ses_label = QLabel("🔊")
+        ses_label = QLabel
         ses_label.setStyleSheet("color: white;")
         self.ses_slider = QSlider(Qt.Horizontal)
         self.ses_slider.setMaximum(100)
@@ -60,10 +60,10 @@ class VideoOynatici(QWidget):
         self.ses_slider.setMaximumWidth(100)
         self.ses_slider.setStyleSheet("QSlider::handle:horizontal { background: white; width: 12px; }")
         self.ses_slider.valueChanged.connect(self.ses_degistir)
-        tamamla_btn = QPushButton("✅ İzlemeyi Tamamla")
+        tamamla_btn = QPushButton(" İzlemeyi Tamamla")
         tamamla_btn.setStyleSheet("background: #28a745; color: white; padding: 8px; border-radius: 4px; font-weight: bold;")
         tamamla_btn.clicked.connect(self.izlemeyi_tamamla)
-        kapat_btn = QPushButton("✖ Kapat")
+        kapat_btn = QPushButton(" Kapat")
         kapat_btn.setStyleSheet("background: #333; color: white; padding: 8px; border-radius: 4px;")
         kapat_btn.clicked.connect(self.kapat)
         kontrol_layout.addWidget(self.oynat_btn)
@@ -92,10 +92,10 @@ class VideoOynatici(QWidget):
     def oynat_durdur(self):
         if self.player.is_playing():
             self.player.pause()
-            self.oynat_btn.setText("▶️ Oynat")
+            self.oynat_btn.setText(" Oynat")
         else:
             self.player.play()
-            self.oynat_btn.setText("⏸ Durdur")
+            self.oynat_btn.setText(" Durdur")
 
     def pozisyon_degistir(self, deger):
         self.player.set_position(deger / 1000.0)
@@ -141,7 +141,7 @@ class VideoOynatici(QWidget):
                 print(f"Tamamlama hatası: {e}")
 
     def _tamamlandi_mesaj(self):
-        QMessageBox.information(self, "Tamamlandı", "✅ İzleme tamamlandı olarak işaretlendi!")
+        QMessageBox.information(self, "Tamamlandı", "İzleme tamamlandı olarak işaretlendi!")
         self.close()
 
     def kapat(self):
@@ -170,7 +170,7 @@ class LoginEkrani(QWidget):
         layout = QVBoxLayout()
         layout.setSpacing(15)
         layout.setContentsMargins(50, 40, 50, 40)
-        baslik = QLabel("🎬 Netflix'e Giriş Yap")
+        baslik = QLabel(" Netflix'e Giriş Yap")
         baslik.setAlignment(Qt.AlignCenter)
         baslik.setStyleSheet("font-size: 18px; font-weight: bold; color: #E50914;")
         self.email_input = QLineEdit()
@@ -240,7 +240,7 @@ class KayitEkrani(QWidget):
         layout = QVBoxLayout()
         layout.setSpacing(10)
         layout.setContentsMargins(50, 30, 50, 30)
-        baslik = QLabel("🎬 Kayıt Ol")
+        baslik = QLabel(" Kayıt Ol")
         baslik.setAlignment(Qt.AlignCenter)
         baslik.setStyleSheet("font-size: 18px; font-weight: bold; color: #E50914;")
         input_style = "padding: 8px; border-radius: 4px; background: #333; color: white;"
@@ -395,20 +395,20 @@ class AnaSayfa(QWidget):
         ust_bar = QWidget()
         ust_bar.setStyleSheet("background-color: #000; padding: 10px;")
         ust_layout = QHBoxLayout()
-        baslik = QLabel("🎬 NETFLIX")
+        baslik = QLabel(" NETFLIX")
         baslik.setStyleSheet("color: #E50914; font-size: 22px; font-weight: bold;")
-        hosgeldin = QLabel(f"👤 {self.kullanici_adi}")
+        hosgeldin = QLabel(f" {self.kullanici_adi}")
         hosgeldin.setStyleSheet("color: white; font-size: 14px;")
-        profil_btn = QPushButton("👤 Profil")
+        profil_btn = QPushButton(" Profil")
         profil_btn.setStyleSheet("background: #333; color: white; padding: 6px 12px; border-radius: 4px;")
         profil_btn.clicked.connect(self.profil_ac)
-        favori_btn = QPushButton("❤️ Favorilerim")
+        favori_btn = QPushButton(" Favorilerim")
         favori_btn.setStyleSheet("background: #333; color: white; padding: 6px 12px; border-radius: 4px;")
         favori_btn.clicked.connect(self.favoriler_ac)
-        gecmis_btn = QPushButton("🕐 Geçmişim")
+        gecmis_btn = QPushButton(" Geçmişim")
         gecmis_btn.setStyleSheet("background: #333; color: white; padding: 6px 12px; border-radius: 4px;")
         gecmis_btn.clicked.connect(self.gecmis_ac)
-        oneri_btn = QPushButton("🎯 Öneriler")
+        oneri_btn = QPushButton(" Öneriler")
         oneri_btn.setStyleSheet("background: #333; color: white; padding: 6px 12px; border-radius: 4px;")
         oneri_btn.clicked.connect(self.oneriler_ac)
         cikis_btn = QPushButton("Çıkış")
@@ -422,7 +422,7 @@ class AnaSayfa(QWidget):
         ust_layout.addWidget(gecmis_btn)
         ust_layout.addWidget(oneri_btn)
         if self.rol_id == 1:
-            admin_btn = QPushButton("⚙️ Admin Panel")
+            admin_btn = QPushButton(" Admin Panel")
             admin_btn.setStyleSheet("background: #E50914; color: white; padding: 6px 12px; border-radius: 4px;")
             admin_btn.clicked.connect(self.admin_ac)
             ust_layout.addWidget(admin_btn)
@@ -433,7 +433,7 @@ class AnaSayfa(QWidget):
         filtre_layout = QHBoxLayout()
         filtre_layout.setSpacing(8)
         self.arama_input = QLineEdit()
-        self.arama_input.setPlaceholderText("🔍 İçerik ara...")
+        self.arama_input.setPlaceholderText(" İçerik ara...")
         self.arama_input.setStyleSheet("padding: 6px; background: #333; color: white; border-radius: 4px; min-width: 150px;")
         self.arama_input.textChanged.connect(self.filtrele)
         self.tip_combo = QComboBox()
@@ -635,11 +635,11 @@ class DetayEkrani(QWidget):
         self.kalinan_label.setStyleSheet("color: #4CAF50; font-size: 12px; font-weight: bold;")
         self.kalinan_label.setAlignment(Qt.AlignCenter)
         self.kalinan_label.setVisible(False)
-        self.devam_btn = QPushButton("⏩ Kaldığı Yerden Devam Et")
+        self.devam_btn = QPushButton(" Kaldığı Yerden Devam Et")
         self.devam_btn.setStyleSheet("background: #4CAF50; color: white; padding: 8px; border-radius: 4px; font-weight: bold;")
         self.devam_btn.clicked.connect(self.kaldigi_yerden_devam)
         self.devam_btn.setVisible(False)
-        self.favori_btn = QPushButton("❤️ Favoriye Ekle")
+        self.favori_btn = QPushButton(" Favoriye Ekle")
         self.favori_btn.setStyleSheet("background: #333; color: white; padding: 8px; border-radius: 4px;")
         self.favori_btn.clicked.connect(self.favori_toggle)
         puan_baslik = QLabel("Puan Ver (1-10):")
@@ -648,10 +648,10 @@ class DetayEkrani(QWidget):
         self.puan_input.setRange(1, 10)
         self.puan_input.setValue(5)
         self.puan_input.setStyleSheet("background: #333; color: white; padding: 4px;")
-        self.puan_btn = QPushButton("⭐ Puanla")
+        self.puan_btn = QPushButton(" Puanla")
         self.puan_btn.setStyleSheet("background: #f5c518; color: black; padding: 8px; border-radius: 4px; font-weight: bold;")
         self.puan_btn.clicked.connect(self.puan_ver)
-        izle_btn = QPushButton("▶️ İzlemeye Başla")
+        izle_btn = QPushButton(" İzlemeye Başla")
         izle_btn.setStyleSheet("background: #E50914; color: white; padding: 10px; border-radius: 4px; font-weight: bold; font-size: 14px;")
         izle_btn.clicked.connect(self.izlemeye_basla)
         self.sonuc_label = QLabel("")
@@ -691,22 +691,22 @@ class DetayEkrani(QWidget):
             row = cursor.fetchone()
             if row:
                 self.bilgi_label.setText(f"Tür: {row[3] or 'Bilinmiyor'}  |  Tip: {row[0]}  |  Yıl: {row[1] or '-'}  |  İzlenme: {row[2] or 0}")
-                self.puan_label.setText(f"⭐ Ortalama Puan: {f'{row[4]:.1f}' if row[4] else 'Henüz puanlanmadı'}")
-                self.aciklama_label.setText(f"📖 {row[5]}" if row[5] else "📖 Açıklama henüz eklenmemiş.")
+                self.puan_label.setText(f" Ortalama Puan: {f'{row[4]:.1f}' if row[4] else 'Henüz puanlanmadı'}")
+                self.aciklama_label.setText(f" {row[5]}" if row[5] else " Açıklama henüz eklenmemiş.")
                 if row[0] == "Dizi":
                     cursor.execute("SELECT kalinan_bolum, kalinan_sure FROM izleme_gecmisi WHERE kullanici_id=%s AND program_id=%s",
                                    (self.kullanici_id, self.program_id))
                     gecmis = cursor.fetchone()
                     if gecmis and gecmis[0]:
                         sure_sn = gecmis[1] or 0
-                        self.kalinan_label.setText(f"📍 Kaldığınız yer: Bölüm {gecmis[0]} — {sure_sn//60:02d}:{sure_sn%60:02d}")
+                        self.kalinan_label.setText(f" Kaldığınız yer: Bölüm {gecmis[0]} — {sure_sn//60:02d}:{sure_sn%60:02d}")
                         self.kalinan_label.setVisible(True)
                         self.devam_btn.setVisible(True)
             cursor.execute("SELECT skor FROM puan WHERE kullanici_id=%s AND program_id=%s", (self.kullanici_id, self.program_id))
             mevcut_puan = cursor.fetchone()
             if mevcut_puan:
                 self.puan_btn.setEnabled(False)
-                self.puan_btn.setText(f"✅ Puanlandı: {mevcut_puan[0]}/10")
+                self.puan_btn.setText(f" Puanlandı: {mevcut_puan[0]}/10")
                 self.puan_btn.setStyleSheet("background: #555; color: #aaa; padding: 8px; border-radius: 4px;")
                 self.puan_input.setEnabled(False)
             cursor.close()
@@ -720,7 +720,7 @@ class DetayEkrani(QWidget):
             cursor = conn.cursor(buffered=True)
             cursor.execute("SELECT fav_id FROM favori WHERE kullanici_id=%s AND program_id=%s", (self.kullanici_id, self.program_id))
             if cursor.fetchone():
-                self.favori_btn.setText("💔 Favoriden Çıkar")
+                self.favori_btn.setText(" Favoriden Çıkar")
                 self.favori_btn.setStyleSheet("background: #E50914; color: white; padding: 8px; border-radius: 4px;")
             cursor.close()
             conn.close()
@@ -734,13 +734,13 @@ class DetayEkrani(QWidget):
             cursor.execute("SELECT fav_id FROM favori WHERE kullanici_id=%s AND program_id=%s", (self.kullanici_id, self.program_id))
             if cursor.fetchone():
                 cursor.execute("DELETE FROM favori WHERE kullanici_id=%s AND program_id=%s", (self.kullanici_id, self.program_id))
-                self.favori_btn.setText("❤️ Favoriye Ekle")
+                self.favori_btn.setText(" Favoriye Ekle")
                 self.favori_btn.setStyleSheet("background: #333; color: white; padding: 8px; border-radius: 4px;")
                 self.sonuc_label.setStyleSheet("color: orange;")
                 self.sonuc_label.setText("Favorilerden çıkarıldı.")
             else:
                 cursor.execute("INSERT INTO favori (kullanici_id, program_id) VALUES (%s, %s)", (self.kullanici_id, self.program_id))
-                self.favori_btn.setText("💔 Favoriden Çıkar")
+                self.favori_btn.setText(" Favoriden Çıkar")
                 self.favori_btn.setStyleSheet("background: #E50914; color: white; padding: 8px; border-radius: 4px;")
                 self.sonuc_label.setStyleSheet("color: green;")
                 self.sonuc_label.setText("Favorilere eklendi!")
@@ -767,9 +767,9 @@ class DetayEkrani(QWidget):
             cursor.close()
             conn.close()
             self.sonuc_label.setStyleSheet("color: green;")
-            self.sonuc_label.setText(f"Puanınız kaydedildi: {skor}/10 ⭐")
+            self.sonuc_label.setText(f"Puanınız kaydedildi: {skor}/10 ")
             self.puan_btn.setEnabled(False)
-            self.puan_btn.setText(f"✅ Puanlandı: {skor}/10")
+            self.puan_btn.setText(f" Puanlandı: {skor}/10")
             self.puan_btn.setStyleSheet("background: #555; color: #aaa; padding: 8px; border-radius: 4px;")
             self.puan_input.setEnabled(False)
             self.bilgileri_yukle()
@@ -799,7 +799,7 @@ class DetayEkrani(QWidget):
                                             program_id=self.program_id, baslangic_sure=kalinan_sure)
                 self.player.show()
                 self.sonuc_label.setStyleSheet("color: green;")
-                self.sonuc_label.setText(f"▶️ Bölüm {bolum_no}'den devam ediliyor...")
+                self.sonuc_label.setText(f" Bölüm {bolum_no}'den devam ediliyor...")
         except Exception as e:
             self.sonuc_label.setStyleSheet("color: red;")
             self.sonuc_label.setText(f"Hata: {e}")
@@ -878,7 +878,7 @@ class DetayEkrani(QWidget):
                                         program_id=self.program_id, baslangic_sure=baslangic_sure)
             self.player.show()
             self.sonuc_label.setStyleSheet("color: green;")
-            self.sonuc_label.setText("▶️ Video açılıyor...")
+            self.sonuc_label.setText(" Video açılıyor...")
         except Exception as e:
             self.sonuc_label.setStyleSheet("color: red;")
             self.sonuc_label.setText(f"Hata: {e}")
@@ -898,13 +898,13 @@ class ProfilEkrani(QWidget):
         layout = QVBoxLayout()
         layout.setSpacing(10)
         layout.setContentsMargins(40, 30, 40, 30)
-        baslik = QLabel("👤 Profilim")
+        baslik = QLabel(" Profilim")
         baslik.setStyleSheet("font-size: 20px; font-weight: bold; color: #E50914;")
         baslik.setAlignment(Qt.AlignCenter)
         self.istatistik_label = QLabel("")
         self.istatistik_label.setStyleSheet("color: #ccc; font-size: 12px; background: #1a1a1a; padding: 10px; border-radius: 4px;")
         self.istatistik_label.setWordWrap(True)
-        ayrac = QLabel("✏️ Bilgilerimi Güncelle")
+        ayrac = QLabel(" Bilgilerimi Güncelle")
         ayrac.setStyleSheet("color: #aaa; font-size: 13px; font-weight: bold;")
         ayrac.setAlignment(Qt.AlignCenter)
         input_style = "padding: 8px; border-radius: 4px; background: #333; color: white;"
@@ -924,7 +924,7 @@ class ProfilEkrani(QWidget):
         self.sifre_input.setPlaceholderText("Yeni Şifre (değiştirmek istemiyorsanız boş bırakın)")
         self.sifre_input.setEchoMode(QLineEdit.Password)
         self.sifre_input.setStyleSheet(input_style)
-        kaydet_btn = QPushButton("💾 Kaydet")
+        kaydet_btn = QPushButton(" Kaydet")
         kaydet_btn.setStyleSheet("background: #E50914; color: white; padding: 10px; border-radius: 4px; font-weight: bold;")
         kaydet_btn.clicked.connect(self.kaydet)
         self.sonuc_label = QLabel("")
@@ -965,10 +965,10 @@ class ProfilEkrani(QWidget):
             conn.close()
             dogum_str = dogum.strftime("%d/%m/%Y") if dogum and hasattr(dogum, 'strftime') else "Belirtilmemiş"
             self.istatistik_label.setText(
-                f"🎂 Doğum Tarihi: {dogum_str}\n\n"
-                f"🎭 Favori Türler: {', '.join(turler) if turler else 'Belirtilmemiş'}\n\n"
-                f"🎬 İzlenen İçerik Sayısı: {izleme_sayisi}\n\n"
-                f"⭐ Verilen Ortalama Puan: {f'{ort_puan}/10' if ort_puan else 'Henüz puan verilmedi'}"
+                f" Doğum Tarihi: {dogum_str}\n\n"
+                f" Favori Türler: {', '.join(turler) if turler else 'Belirtilmemiş'}\n\n"
+                f" İzlenen İçerik Sayısı: {izleme_sayisi}\n\n"
+                f" Verilen Ortalama Puan: {f'{ort_puan}/10' if ort_puan else 'Henüz puan verilmedi'}"
             )
         except Exception as e:
             print(f"Profil yükleme hatası: {e}")
@@ -1017,7 +1017,7 @@ class FavorilerEkrani(QWidget):
         layout = QVBoxLayout()
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(10)
-        baslik = QLabel("❤️ Favorilerim")
+        baslik = QLabel(" Favorilerim")
         baslik.setStyleSheet("font-size: 18px; font-weight: bold; color: #E50914;")
         baslik.setAlignment(Qt.AlignCenter)
         filtre_widget = QWidget()
@@ -1046,7 +1046,7 @@ class FavorilerEkrani(QWidget):
         self.tablo.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.tablo.verticalHeader().setVisible(False)
         self.tablo.doubleClicked.connect(self.detay_ac)
-        sil_btn = QPushButton("🗑️ Seçiliyi Favoriden Çıkar")
+        sil_btn = QPushButton(" Seçiliyi Favoriden Çıkar")
         sil_btn.setStyleSheet("background: #E50914; color: white; padding: 8px; border-radius: 4px;")
         sil_btn.clicked.connect(self.favoriden_cikar)
         self.sonuc_label = QLabel("")
@@ -1154,7 +1154,7 @@ class GecmisEkrani(QWidget):
     def setup_ui(self):
         layout = QVBoxLayout()
         layout.setContentsMargins(20, 20, 20, 20)
-        baslik = QLabel("🕐 İzleme Geçmişim")
+        baslik = QLabel(" İzleme Geçmişim")
         baslik.setStyleSheet("font-size: 18px; font-weight: bold; color: #E50914;")
         baslik.setAlignment(Qt.AlignCenter)
         self.tablo = QTableWidget()
@@ -1165,7 +1165,7 @@ class GecmisEkrani(QWidget):
         self.tablo.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.tablo.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.tablo.verticalHeader().setVisible(False)
-        temizle_btn = QPushButton("🗑️ Geçmişi Temizle")
+        temizle_btn = QPushButton(" Geçmişi Temizle")
         temizle_btn.setStyleSheet("background: #555; color: white; padding: 8px; border-radius: 4px;")
         temizle_btn.clicked.connect(self.gecmisi_temizle)
         self.sonuc_label = QLabel("")
@@ -1183,7 +1183,7 @@ class GecmisEkrani(QWidget):
             cursor = conn.cursor(buffered=True)
             cursor.execute("""SELECT p.ad, p.tip, ig.kalinan_bolum, ig.kalinan_sure,
                 DATE_FORMAT(ig.son_izleme, '%d/%m/%Y %H:%i'),
-                IF(ig.tamamlandi, 'Tamamlandı ✅', 'Devam Ediyor ▶️'), pu.skor
+                IF(ig.tamamlandi, 'Tamamlandı ', 'Devam Ediyor '), pu.skor
                 FROM izleme_gecmisi ig JOIN program p ON ig.program_id = p.program_id
                 LEFT JOIN puan pu ON ig.program_id = pu.program_id AND pu.kullanici_id = ig.kullanici_id
                 WHERE ig.kullanici_id = %s ORDER BY ig.son_izleme DESC""", (self.kullanici_id,))
@@ -1200,7 +1200,7 @@ class GecmisEkrani(QWidget):
                 self.tablo.setItem(i, 3, QTableWidgetItem(f"{sure_sn//60}dk {sure_sn%60}sn" if sure_sn > 0 else "-"))
                 self.tablo.setItem(i, 4, QTableWidgetItem(str(row[4]) if row[4] else ""))
                 self.tablo.setItem(i, 5, QTableWidgetItem(str(row[5]) if row[5] else ""))
-                self.tablo.setItem(i, 6, QTableWidgetItem(f"{row[6]}/10 ⭐" if row[6] else "Puanlanmadı"))
+                self.tablo.setItem(i, 6, QTableWidgetItem(f"{row[6]}/10 " if row[6] else "Puanlanmadı"))
                 for j in range(7):
                     item = self.tablo.item(i, j)
                     if item:
@@ -1239,7 +1239,7 @@ class OneriEkrani(QWidget):
         layout = QVBoxLayout()
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(10)
-        baslik = QLabel("🎯 Size Özel İçerik Önerileri")
+        baslik = QLabel(" Size Özel İçerik Önerileri")
         baslik.setStyleSheet("font-size: 18px; font-weight: bold; color: #E50914;")
         baslik.setAlignment(Qt.AlignCenter)
         self.tabs = QTabWidget()
@@ -1248,11 +1248,11 @@ class OneriEkrani(QWidget):
             QTabBar::tab { background: #333; color: white; padding: 6px 12px; }
             QTabBar::tab:selected { background: #E50914; }
         """)
-        self.tabs.addTab(self._favori_tur_tab(), "🎭 Favori Türler")
-        self.tabs.addTab(self._yuksek_puan_tur_tab(), "⭐ Puan Verdiğim Türler")
-        self.tabs.addTab(self._en_cok_izlenen_tab(), "🔥 En Çok İzlenenler")
-        self.tabs.addTab(self._benzer_kullanici_tab(), "👥 Benzer Kullanıcılar")
-        bilgi = QLabel("💡 Detay için herhangi bir içeriğe çift tıklayın.")
+        self.tabs.addTab(self._favori_tur_tab(), " Favori Türler")
+        self.tabs.addTab(self._yuksek_puan_tur_tab(), " Puan Verdiğim Türler")
+        self.tabs.addTab(self._en_cok_izlenen_tab(), " En Çok İzlenenler")
+        self.tabs.addTab(self._benzer_kullanici_tab(), " Benzer Kullanıcılar")
+        bilgi = QLabel(" Detay için herhangi bir içeriğe çift tıklayın.")
         bilgi.setStyleSheet("color: #555; font-size: 11px;")
         bilgi.setAlignment(Qt.AlignCenter)
         layout.addWidget(baslik)
@@ -1297,7 +1297,7 @@ class OneriEkrani(QWidget):
                 cursor.close()
                 conn.close()
                 return
-            self.tur_label.setText(f"📌 Kayıt sırasında seçtiğiniz türler: {', '.join([t[1] for t in turler])}")
+            self.tur_label.setText(f" Kayıt sırasında seçtiğiniz türler: {', '.join([t[1] for t in turler])}")
             tum_oneriler = []
             eklenen_idler = set()
             for tur_id, tur_adi in turler:
@@ -1345,7 +1345,7 @@ class OneriEkrani(QWidget):
                 cursor.close()
                 conn.close()
                 return
-            self.puan_tur_label.setText(f"⭐ Yüksek puan verdiğiniz türler: {', '.join([t[1] for t in turler])}")
+            self.puan_tur_label.setText(f" Yüksek puan verdiğiniz türler: {', '.join([t[1] for t in turler])}")
             oneriler = []
             eklenen_idler = set()
             for tur_id, tur_adi in turler:
@@ -1370,7 +1370,7 @@ class OneriEkrani(QWidget):
         widget = QWidget()
         layout = QVBoxLayout()
         layout.setContentsMargins(10, 10, 10, 10)
-        bilgi = QLabel("🔥 Platformdaki en çok izlenen içerikler:")
+        bilgi = QLabel(" Platformdaki en çok izlenen içerikler:")
         bilgi.setStyleSheet("color: #aaa; font-size: 12px; padding: 4px;")
         self.en_cok_tablo = self._tablo_olustur()
         layout.addWidget(bilgi)
@@ -1426,7 +1426,7 @@ class OneriEkrani(QWidget):
                 cursor.close()
                 conn.close()
                 return
-            self.benzer_label.setText(f"👥 Sizinle aynı zevklere sahip {len(benzer_kullanicilar)} kullanıcının izledikleri:")
+            self.benzer_label.setText(f" Sizinle aynı zevklere sahip {len(benzer_kullanicilar)} kullanıcının izledikleri:")
             format_str = ",".join(["%s"] * len(benzer_kullanicilar))
             cursor.execute(f"""SELECT p.program_id, p.ad,
                 GROUP_CONCAT(DISTINCT t.tur_adi SEPARATOR ', '),
@@ -1453,7 +1453,7 @@ class OneriEkrani(QWidget):
             sira.setTextAlignment(Qt.AlignCenter)
             tablo.setItem(i, 0, sira)
             for j, val in enumerate(row[1:]):
-                puan_str = f"{val}/10 ⭐" if j == 2 and val and float(val) > 0 else str(val) if val else "-"
+                puan_str = f"{val}/10 " if j == 2 and val and float(val) > 0 else str(val) if val else "-"
                 item = QTableWidgetItem(puan_str)
                 item.setTextAlignment(Qt.AlignCenter)
                 tablo.setItem(i, j + 1, item)
@@ -1491,10 +1491,10 @@ class AdminEkrani(QWidget):
     def setup_ui(self):
         ana_layout = QVBoxLayout()
         ana_layout.setContentsMargins(20, 20, 20, 20)
-        baslik = QLabel("⚙️ Admin Paneli")
+        baslik = QLabel(" Admin Paneli")
         baslik.setStyleSheet("font-size: 20px; font-weight: bold; color: #E50914;")
         baslik.setAlignment(Qt.AlignCenter)
-        oneri_btn = QPushButton("🎯 Bana Özel Öneriler")
+        oneri_btn = QPushButton(" Bana Özel Öneriler")
         oneri_btn.setStyleSheet("background: #333; color: white; padding: 8px; border-radius: 4px; font-size: 13px;")
         oneri_btn.clicked.connect(self.oneriler_ac)
         self.tabs = QTabWidget()
@@ -1503,12 +1503,12 @@ class AdminEkrani(QWidget):
             QTabBar::tab { background: #333; color: white; padding: 8px 16px; }
             QTabBar::tab:selected { background: #E50914; }
         """)
-        self.tabs.addTab(self.icerik_tab(), "🎬 İçerik Yönetimi")
-        self.tabs.addTab(self.tur_tab(), "🏷️ Tür Yönetimi")
-        self.tabs.addTab(self.kullanici_tab(), "👥 Kullanıcılar")
-        self.tabs.addTab(self.istatistik_tab(), "🏆 En Yüksek Puanlılar")
-        self.tabs.addTab(self.kullanici_istatistik_tab(), "📊 Kullanıcı İstatistikleri")
-        self.tabs.addTab(self.rapor_tab(), "📋 Raporlar")
+        self.tabs.addTab(self.icerik_tab(), " İçerik Yönetimi")
+        self.tabs.addTab(self.tur_tab(), "Tür Yönetimi")
+        self.tabs.addTab(self.kullanici_tab(), " Kullanıcılar")
+        self.tabs.addTab(self.istatistik_tab(), " En Yüksek Puanlılar")
+        self.tabs.addTab(self.kullanici_istatistik_tab(), " Kullanıcı İstatistikleri")
+        self.tabs.addTab(self.rapor_tab(), " Raporlar")
         ana_layout.addWidget(baslik)
         ana_layout.addWidget(oneri_btn)
         ana_layout.addWidget(self.tabs)
@@ -1535,7 +1535,7 @@ class AdminEkrani(QWidget):
         self.icerik_yil.setPlaceholderText("Yayın Yılı")
         self.icerik_yil.setStyleSheet(input_style)
         self.icerik_yil.setMaximumWidth(100)
-        ekle_btn = QPushButton("➕ Ekle")
+        ekle_btn = QPushButton(" Ekle")
         ekle_btn.setStyleSheet("background: #28a745; color: white; padding: 6px 12px; border-radius: 4px;")
         ekle_btn.clicked.connect(self.icerik_ekle)
         form_layout.addWidget(self.icerik_ad)
@@ -1552,10 +1552,10 @@ class AdminEkrani(QWidget):
         self.icerik_tablo.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.icerik_tablo.verticalHeader().setVisible(False)
         buton_layout = QHBoxLayout()
-        guncelle_btn = QPushButton("✏️ Güncelle")
+        guncelle_btn = QPushButton(" Güncelle")
         guncelle_btn.setStyleSheet("background: #ffc107; color: black; padding: 8px; border-radius: 4px;")
         guncelle_btn.clicked.connect(self.icerik_guncelle)
-        sil_btn = QPushButton("🗑️ Sil")
+        sil_btn = QPushButton(" Sil")
         sil_btn.setStyleSheet("background: #E50914; color: white; padding: 8px; border-radius: 4px;")
         sil_btn.clicked.connect(self.icerik_sil)
         buton_layout.addWidget(guncelle_btn)
@@ -1656,7 +1656,7 @@ class AdminEkrani(QWidget):
         bolum_label.setStyleSheet(label_style)
         bolum_input = QLineEdit(str(row[3]) if row[3] else "")
         bolum_input.setStyleSheet(input_style)
-        kaydet_btn = QPushButton("💾 Kaydet")
+        kaydet_btn = QPushButton(" Kaydet")
         kaydet_btn.setStyleSheet("background: #E50914; color: white; padding: 8px; border-radius: 4px; font-weight: bold;")
         dlayout.addWidget(ad_label)
         dlayout.addWidget(ad_input)
@@ -1726,7 +1726,7 @@ class AdminEkrani(QWidget):
         self.tur_ad_input = QLineEdit()
         self.tur_ad_input.setPlaceholderText("Yeni Tür Adı")
         self.tur_ad_input.setStyleSheet(input_style)
-        tur_ekle_btn = QPushButton("➕ Tür Ekle")
+        tur_ekle_btn = QPushButton(" Tür Ekle")
         tur_ekle_btn.setStyleSheet("background: #28a745; color: white; padding: 6px 12px; border-radius: 4px;")
         tur_ekle_btn.clicked.connect(self.tur_ekle)
         form_layout.addWidget(self.tur_ad_input)
@@ -1741,10 +1741,10 @@ class AdminEkrani(QWidget):
         self.tur_tablo.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.tur_tablo.verticalHeader().setVisible(False)
         buton_layout = QHBoxLayout()
-        tur_guncelle_btn = QPushButton("✏️ Güncelle")
+        tur_guncelle_btn = QPushButton(" Güncelle")
         tur_guncelle_btn.setStyleSheet("background: #ffc107; color: black; padding: 8px; border-radius: 4px;")
         tur_guncelle_btn.clicked.connect(self.tur_guncelle)
-        tur_sil_btn = QPushButton("🗑️ Sil")
+        tur_sil_btn = QPushButton("Sil")
         tur_sil_btn.setStyleSheet("background: #E50914; color: white; padding: 8px; border-radius: 4px;")
         tur_sil_btn.clicked.connect(self.tur_sil)
         buton_layout.addWidget(tur_guncelle_btn)
@@ -1856,10 +1856,10 @@ class AdminEkrani(QWidget):
         self.kullanici_tablo.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.kullanici_tablo.verticalHeader().setVisible(False)
         buton_layout = QHBoxLayout()
-        detay_btn = QPushButton("👁️ Kullanıcı Detayı")
+        detay_btn = QPushButton(" Kullanıcı Detayı")
         detay_btn.setStyleSheet("background: #333; color: white; padding: 8px; border-radius: 4px;")
         detay_btn.clicked.connect(self.kullanici_detay)
-        sil_btn = QPushButton("🗑️ Kullanıcıyı Sil")
+        sil_btn = QPushButton(" Kullanıcıyı Sil")
         sil_btn.setStyleSheet("background: #E50914; color: white; padding: 8px; border-radius: 4px;")
         sil_btn.clicked.connect(self.kullanici_sil)
         buton_layout.addWidget(detay_btn)
@@ -1927,14 +1927,14 @@ class AdminEkrani(QWidget):
             dogum = kullanici[3].strftime("%d/%m/%Y") if kullanici[3] else "Belirtilmemiş"
             dk, sn = toplam_sure // 60, toplam_sure % 60
             bilgi_label = QLabel(
-                f"👤 {kullanici[0]} {kullanici[1]}  |  📧 {kullanici[2]}\n"
-                f"🎂 Doğum: {dogum}  |  ⚧ {kullanici[4] or '-'}  |  🌍 {kullanici[5] or '-'}\n"
-                f"🎭 Favori Türler: {', '.join(turler) if turler else 'Belirtilmemiş'}\n"
-                f"⏱️ Toplam İzleme Süresi: {dk} dk {sn} sn"
+                f" {kullanici[0]} {kullanici[1]}  |   {kullanici[2]}\n"
+                f" Doğum: {dogum}  |  ⚧ {kullanici[4] or '-'}  |   {kullanici[5] or '-'}\n"
+                f" Favori Türler: {', '.join(turler) if turler else 'Belirtilmemiş'}\n"
+                f" Toplam İzleme Süresi: {dk} dk {sn} sn"
             )
             bilgi_label.setStyleSheet("color: #ccc; font-size: 12px; background: #1a1a1a; padding: 10px; border-radius: 4px;")
             bilgi_label.setWordWrap(True)
-            gecmis_baslik = QLabel("📺 İzleme Geçmişi")
+            gecmis_baslik = QLabel(" İzleme Geçmişi")
             gecmis_baslik.setStyleSheet("color: #E50914; font-size: 14px; font-weight: bold;")
             tablo = QTableWidget()
             tablo.setColumnCount(5)
@@ -1994,10 +1994,10 @@ class AdminEkrani(QWidget):
         layout = QVBoxLayout()
         layout.setSpacing(10)
         layout.setContentsMargins(15, 15, 15, 15)
-        baslik = QLabel("🏆 En Yüksek Puan Alan İçerikler")
+        baslik = QLabel(" En Yüksek Puan Alan İçerikler")
         baslik.setStyleSheet("font-size: 16px; font-weight: bold; color: #f5c518;")
         baslik.setAlignment(Qt.AlignCenter)
-        yenile_btn = QPushButton("🔄 Yenile")
+        yenile_btn = QPushButton(" Yenile")
         yenile_btn.setStyleSheet("background: #333; color: white; padding: 6px 12px; border-radius: 4px;")
         yenile_btn.clicked.connect(self.istatistik_yukle)
         self.istatistik_tablo = QTableWidget()
@@ -2045,10 +2045,10 @@ class AdminEkrani(QWidget):
         layout = QVBoxLayout()
         layout.setSpacing(10)
         layout.setContentsMargins(15, 15, 15, 15)
-        baslik = QLabel("📊 Kullanıcı İzleme İstatistikleri")
+        baslik = QLabel(" Kullanıcı İzleme İstatistikleri")
         baslik.setStyleSheet("font-size: 16px; font-weight: bold; color: #E50914;")
         baslik.setAlignment(Qt.AlignCenter)
-        yenile_btn = QPushButton("🔄 Yenile")
+        yenile_btn = QPushButton(" Yenile")
         yenile_btn.setStyleSheet("background: #333; color: white; padding: 6px 12px; border-radius: 4px;")
         yenile_btn.clicked.connect(self.kullanici_istatistik_yukle)
         self.kullanici_ist_tablo = QTableWidget()
@@ -2096,13 +2096,13 @@ class AdminEkrani(QWidget):
         ozet_widget = QWidget()
         ozet_widget.setStyleSheet("background: #1a1a1a; border-radius: 6px; padding: 10px;")
         ozet_layout = QHBoxLayout()
-        self.kullanici_sayi_label = QLabel("👥 Kullanıcı: -")
+        self.kullanici_sayi_label = QLabel(" Kullanıcı: -")
         self.kullanici_sayi_label.setStyleSheet("color: white; font-size: 14px; font-weight: bold;")
         self.kullanici_sayi_label.setAlignment(Qt.AlignCenter)
-        self.izlenme_sayi_label = QLabel("🎬 Toplam İzlenme: -")
+        self.izlenme_sayi_label = QLabel(" Toplam İzlenme: -")
         self.izlenme_sayi_label.setStyleSheet("color: white; font-size: 14px; font-weight: bold;")
         self.izlenme_sayi_label.setAlignment(Qt.AlignCenter)
-        self.puan_sayi_label = QLabel("⭐ Toplam Puan: -")
+        self.puan_sayi_label = QLabel(" Toplam Puan: -")
         self.puan_sayi_label.setStyleSheet("color: white; font-size: 14px; font-weight: bold;")
         self.puan_sayi_label.setAlignment(Qt.AlignCenter)
         ozet_layout.addWidget(self.kullanici_sayi_label)
@@ -2115,12 +2115,12 @@ class AdminEkrani(QWidget):
             QTabBar::tab { background: #222; color: white; padding: 6px 12px; }
             QTabBar::tab:selected { background: #555; }
         """)
-        rapor_tabs.addTab(self._en_cok_izlenen_tab(), "🎬 En Çok İzlenen 10")
-        rapor_tabs.addTab(self._en_yuksek_puan_tab(), "⭐ En Yüksek Puanlı 10")
-        rapor_tabs.addTab(self._en_cok_tur_tab(), "🏷️ En Çok İzlenen Türler")
-        rapor_tabs.addTab(self._en_aktif_tab(), "👥 En Aktif Kullanıcılar")
-        rapor_tabs.addTab(self._son_7_gun_tab(), "📅 Son 7 Gün")
-        yenile_btn = QPushButton("🔄 Tüm Raporları Yenile")
+        rapor_tabs.addTab(self._en_cok_izlenen_tab(), " En Çok İzlenen 10")
+        rapor_tabs.addTab(self._en_yuksek_puan_tab(), " En Yüksek Puanlı 10")
+        rapor_tabs.addTab(self._en_cok_tur_tab(), " En Çok İzlenen Türler")
+        rapor_tabs.addTab(self._en_aktif_tab(), " En Aktif Kullanıcılar")
+        rapor_tabs.addTab(self._son_7_gun_tab(), " Son 7 Gün")
+        yenile_btn = QPushButton(" Tüm Raporları Yenile")
         yenile_btn.setStyleSheet("background: #E50914; color: white; padding: 8px; border-radius: 4px; font-weight: bold;")
         yenile_btn.clicked.connect(self.raporlari_yukle)
         ana_layout.addWidget(ozet_widget)
@@ -2186,11 +2186,11 @@ class AdminEkrani(QWidget):
             conn = get_connection()
             cursor = conn.cursor(buffered=True)
             cursor.execute("SELECT COUNT(*) FROM kullanici WHERE rol_id=2")
-            self.kullanici_sayi_label.setText(f"👥 Kullanıcı: {cursor.fetchone()[0]}")
+            self.kullanici_sayi_label.setText(f" Kullanıcı: {cursor.fetchone()[0]}")
             cursor.execute("SELECT COUNT(*) FROM izleme_gecmisi")
-            self.izlenme_sayi_label.setText(f"🎬 Toplam İzlenme: {cursor.fetchone()[0]}")
+            self.izlenme_sayi_label.setText(f" Toplam İzlenme: {cursor.fetchone()[0]}")
             cursor.execute("SELECT COUNT(*) FROM puan")
-            self.puan_sayi_label.setText(f"⭐ Toplam Puan: {cursor.fetchone()[0]}")
+            self.puan_sayi_label.setText(f" Toplam Puan: {cursor.fetchone()[0]}")
             cursor.execute("SELECT p.ad, p.tip, p.izlenme_sayisi FROM program p ORDER BY p.izlenme_sayisi DESC LIMIT 10")
             self._rapor_tablo_doldur(self.en_cok_izlenen_tablo, cursor.fetchall())
             cursor.execute("""SELECT p.ad, p.tip, ROUND(AVG(pu.skor), 1), COUNT(pu.puan_id)
