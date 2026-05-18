@@ -1,0 +1,2243 @@
+# -*- coding: utf-8 -*-
+import sys
+import os
+import vlc
+from PyQt5.QtWidgets import *
+from PyQt5.QtCore import Qt, QDate, QTimer
+from PyQt5.QtGui import QColor
+import mysql.connector
+
+# VERİTABANI BAĞLANTISI
+def get_connection():
+    conn = mysql.connector.connect(
+        host="localhost",
+        user="root",
+        password="",
+        database="netflix_db"
+    )
+    return conn
+
+
+# VIDEO OYNATICI
+class VideoOynatici(QWidget):
+    def __init__(self, video_dosyasi, baslik, kullanici_id=None, program_id=None, baslangic_sure=0):
+        super().__init__()
+        self.setWindowTitle(f"Netflix - {baslik}")
+        self.setMinimumSize(800, 500)
+        self.setStyleSheet("background-color: #000;")
+        self.video_dosyasi = os.path.abspath(video_dosyasi)
+        self.kullanici_id = kullanici_id
+        self.program_id = program_id
+        self.baslangic_sure = baslangic_sure
+        self.instance = vlc.Instance()
+        self.player = self.instance.media_player_new()
+        self.setup_ui()
+
+    def setup_ui(self):
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        self.video_frame = QFrame()
+        self.video_frame.setStyleSheet("background: black;")
+        self.video_frame.setMinimumHeight(400)
+        kontrol_widget = QWidget()
+        kontrol_widget.setStyleSheet("background: #111; padding: 8px;")
+        kontrol_layout = QHBoxLayout()
+        self.oynat_btn = QPushButton("⏸ Durdur")
+        self.oynat_btn.setStyleSheet("background: #E50914; color: white; padding: 8px 16px; border-radius: 4px; font-weight: bold;")
+        self.oynat_btn.clicked.connect(self.oynat_durdur)
+        self.ilerleme = QSlider(Qt.Horizontal)
+        self.ilerleme.setMaximum(1000)
+        self.ilerleme.setStyleSheet("QSlider::handle:horizontal { background: #E50914; width: 12px; }")
+        self.ilerleme.sliderMoved.connect(self.pozisyon_degistir)
+        self.sure_label = QLabel("00:00 / 00:00")
+        self.sure_label.setStyleSheet("color: white; font-size: 12px;")
+        ses_label = QLabel("🔊")
+        ses_label.setStyleSheet("color: white;")
+        self.ses_slider = QSlider(Qt.Horizontal)
+        self.ses_slider.setMaximum(100)
+        self.ses_slider.setValue(80)
+        self.ses_slider.setMaximumWidth(100)
+        self.ses_slider.setStyleSheet("QSlider::handle:horizontal { background: white; width: 12px; }")
+        self.ses_slider.valueChanged.connect(self.ses_degistir)
+        tamamla_btn = QPushButton("✅ İzlemeyi Tamamla")
+        tamamla_btn.setStyleSheet("background: #28a745; color: white; padding: 8px; border-radius: 4px; font-weight: bold;")
+        tamamla_btn.clicked.connect(self.izlemeyi_tamamla)
+        kapat_btn = QPushButton("✖ Kapat")
+        kapat_btn.setStyleSheet("background: #333; color: white; padding: 8px; border-radius: 4px;")
+        kapat_btn.clicked.connect(self.kapat)
+        kontrol_layout.addWidget(self.oynat_btn)
+        kontrol_layout.addWidget(self.ilerleme)
+        kontrol_layout.addWidget(self.sure_label)
+        kontrol_layout.addWidget(ses_label)
+        kontrol_layout.addWidget(self.ses_slider)
+        kontrol_layout.addWidget(tamamla_btn)
+        kontrol_layout.addWidget(kapat_btn)
+        kontrol_widget.setLayout(kontrol_layout)
+        layout.addWidget(self.video_frame)
+        layout.addWidget(kontrol_widget)
+        self.setLayout(layout)
+        media = self.instance.media_new(self.video_dosyasi)
+        self.player.set_media(media)
+        self.player.set_hwnd(int(self.video_frame.winId()))
+        self.player.audio_set_volume(80)
+        self.player.play()
+        if self.baslangic_sure > 0:
+            QTimer.singleShot(1000, lambda: self.player.set_time(self.baslangic_sure * 1000))
+        self.timer = QTimer()
+        self.timer.setInterval(500)
+        self.timer.timeout.connect(self.sure_guncelle)
+        self.timer.start()
+
+    def oynat_durdur(self):
+        if self.player.is_playing():
+            self.player.pause()
+            self.oynat_btn.setText("▶️ Oynat")
+        else:
+            self.player.play()
+            self.oynat_btn.setText("⏸ Durdur")
+
+    def pozisyon_degistir(self, deger):
+        self.player.set_position(deger / 1000.0)
+
+    def ses_degistir(self, deger):
+        self.player.audio_set_volume(deger)
+
+    def sure_guncelle(self):
+        if self.player.get_length() > 0:
+            sure = self.player.get_length() // 1000
+            pozisyon = self.player.get_time() // 1000
+            self.ilerleme.setValue(int(self.player.get_position() * 1000))
+            self.sure_label.setText(f"{pozisyon//60:02d}:{pozisyon%60:02d} / {sure//60:02d}:{sure%60:02d}")
+
+    def kalinan_sureyi_kaydet(self):
+        if self.kullanici_id and self.program_id:
+            sure_sn = self.player.get_time() // 1000
+            try:
+                conn = get_connection()
+                cursor = conn.cursor(buffered=True)
+                cursor.execute("UPDATE izleme_gecmisi SET kalinan_sure=%s WHERE kullanici_id=%s AND program_id=%s",
+                               (sure_sn, self.kullanici_id, self.program_id))
+                conn.commit()
+                cursor.close()
+                conn.close()
+            except Exception as e:
+                print(f"Süre kaydetme hatası: {e}")
+
+    def izlemeyi_tamamla(self):
+        if self.kullanici_id and self.program_id:
+            try:
+                self.timer.stop()
+                self.player.stop()
+                conn = get_connection()
+                cursor = conn.cursor(buffered=True)
+                cursor.execute("UPDATE izleme_gecmisi SET tamamlandi=1, kalinan_sure=0 WHERE kullanici_id=%s AND program_id=%s",
+                               (self.kullanici_id, self.program_id))
+                conn.commit()
+                cursor.close()
+                conn.close()
+                QTimer.singleShot(300, self._tamamlandi_mesaj)
+            except Exception as e:
+                print(f"Tamamlama hatası: {e}")
+
+    def _tamamlandi_mesaj(self):
+        QMessageBox.information(self, "Tamamlandı", "✅ İzleme tamamlandı olarak işaretlendi!")
+        self.close()
+
+    def kapat(self):
+        self.kalinan_sureyi_kaydet()
+        self.player.stop()
+        self.timer.stop()
+        self.close()
+
+    def closeEvent(self, event):
+        self.kalinan_sureyi_kaydet()
+        self.player.stop()
+        self.timer.stop()
+        event.accept()
+
+
+# GİRİŞ EKRANI
+class LoginEkrani(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Netflix - Giriş Yap")
+        self.setFixedSize(400, 300)
+        self.setStyleSheet("background-color: #141414; color: white;")
+        self.setup_ui()
+
+    def setup_ui(self):
+        layout = QVBoxLayout()
+        layout.setSpacing(15)
+        layout.setContentsMargins(50, 40, 50, 40)
+        baslik = QLabel("🎬 Netflix'e Giriş Yap")
+        baslik.setAlignment(Qt.AlignCenter)
+        baslik.setStyleSheet("font-size: 18px; font-weight: bold; color: #E50914;")
+        self.email_input = QLineEdit()
+        self.email_input.setPlaceholderText("E-mail")
+        self.email_input.setStyleSheet("padding: 8px; border-radius: 4px; background: #333; color: white;")
+        self.sifre_input = QLineEdit()
+        self.sifre_input.setPlaceholderText("Şifre")
+        self.sifre_input.setEchoMode(QLineEdit.Password)
+        self.sifre_input.setStyleSheet("padding: 8px; border-radius: 4px; background: #333; color: white;")
+        giris_btn = QPushButton("Giriş Yap")
+        giris_btn.setStyleSheet("background-color: #E50914; color: white; padding: 10px; border-radius: 4px; font-weight: bold;")
+        giris_btn.clicked.connect(self.giris_yap)
+        kayit_btn = QPushButton("Hesabın yok mu? Kayıt Ol")
+        kayit_btn.setStyleSheet("background: none; color: #aaa; border: none;")
+        kayit_btn.clicked.connect(self.kayit_ac)
+        self.hata_label = QLabel("")
+        self.hata_label.setAlignment(Qt.AlignCenter)
+        self.hata_label.setStyleSheet("color: red;")
+        layout.addWidget(baslik)
+        layout.addWidget(self.email_input)
+        layout.addWidget(self.sifre_input)
+        layout.addWidget(giris_btn)
+        layout.addWidget(kayit_btn)
+        layout.addWidget(self.hata_label)
+        self.setLayout(layout)
+
+    def giris_yap(self):
+        email = self.email_input.text().strip()
+        sifre = self.sifre_input.text().strip()
+        if not email or not sifre:
+            self.hata_label.setText("Lütfen tüm alanları doldurun!")
+            return
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("SELECT kullanici_id, ad, rol_id FROM kullanici WHERE email=%s AND sifre=%s", (email, sifre))
+            kullanici = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            if kullanici:
+                self.ana = AnaSayfa(kullanici[0], kullanici[1], kullanici[2])
+                self.ana.show()
+                self.close()
+            else:
+                self.hata_label.setStyleSheet("color: red;")
+                self.hata_label.setText("Email veya şifre hatalı!")
+        except Exception as e:
+            self.hata_label.setText(f"Hata: {e}")
+
+    def kayit_ac(self):
+        self.kayit = KayitEkrani(self)
+        self.kayit.show()
+        self.hide()
+
+
+# KAYIT EKRANI
+class KayitEkrani(QWidget):
+    def __init__(self, login_ekrani):
+        super().__init__()
+        self.login_ekrani = login_ekrani
+        self.setWindowTitle("Netflix - Kayıt Ol")
+        self.setFixedSize(500, 650)
+        self.setStyleSheet("background-color: #141414; color: white;")
+        self.setup_ui()
+
+    def setup_ui(self):
+        layout = QVBoxLayout()
+        layout.setSpacing(10)
+        layout.setContentsMargins(50, 30, 50, 30)
+        baslik = QLabel("🎬 Kayıt Ol")
+        baslik.setAlignment(Qt.AlignCenter)
+        baslik.setStyleSheet("font-size: 18px; font-weight: bold; color: #E50914;")
+        input_style = "padding: 8px; border-radius: 4px; background: #333; color: white;"
+        self.ad_input = QLineEdit()
+        self.ad_input.setPlaceholderText("Ad")
+        self.ad_input.setStyleSheet(input_style)
+        self.soyad_input = QLineEdit()
+        self.soyad_input.setPlaceholderText("Soyad")
+        self.soyad_input.setStyleSheet(input_style)
+        self.email_input = QLineEdit()
+        self.email_input.setPlaceholderText("E-mail")
+        self.email_input.setStyleSheet(input_style)
+        self.sifre_input = QLineEdit()
+        self.sifre_input.setPlaceholderText("Şifre (en az 6 karakter)")
+        self.sifre_input.setEchoMode(QLineEdit.Password)
+        self.sifre_input.setStyleSheet(input_style)
+        self.sifre2_input = QLineEdit()
+        self.sifre2_input.setPlaceholderText("Şifre Tekrar")
+        self.sifre2_input.setEchoMode(QLineEdit.Password)
+        self.sifre2_input.setStyleSheet(input_style)
+        self.dogum_input = QDateEdit()
+        self.dogum_input.setStyleSheet(input_style)
+        self.dogum_input.setCalendarPopup(True)
+        self.dogum_input.setDisplayFormat("dd/MM/yyyy")
+        bugun = QDate(2026, 5, 18)
+        self.dogum_input.setMaximumDate(bugun)
+        self.dogum_input.setDate(QDate(2000, 1, 1))
+        self.cinsiyet_input = QComboBox()
+        self.cinsiyet_input.addItems(["Erkek", "Kadın", "Diğer"])
+        self.cinsiyet_input.setStyleSheet(input_style)
+        self.ulke_input = QLineEdit()
+        self.ulke_input.setPlaceholderText("Ülke")
+        self.ulke_input.setStyleSheet(input_style)
+        tur_label = QLabel("3 Favori Tür Seçin:")
+        tur_label.setStyleSheet("color: #aaa;")
+        self.tur_listesi = QListWidget()
+        self.tur_listesi.setSelectionMode(QAbstractItemView.MultiSelection)
+        self.tur_listesi.setStyleSheet("background: #333; color: white; padding: 4px;")
+        self.tur_listesi.setMaximumHeight(120)
+        self.turleri_yukle()
+        kayit_btn = QPushButton("Kayıt Ol")
+        kayit_btn.setStyleSheet("background-color: #E50914; color: white; padding: 10px; border-radius: 4px; font-weight: bold;")
+        kayit_btn.clicked.connect(self.kayit_ol)
+        geri_btn = QPushButton("Zaten hesabın var mı? Giriş Yap")
+        geri_btn.setStyleSheet("background: none; color: #aaa; border: none;")
+        geri_btn.clicked.connect(self.geri_don)
+        self.hata_label = QLabel("")
+        self.hata_label.setAlignment(Qt.AlignCenter)
+        self.hata_label.setStyleSheet("color: red;")
+        self.hata_label.setWordWrap(True)
+        layout.addWidget(baslik)
+        layout.addWidget(self.ad_input)
+        layout.addWidget(self.soyad_input)
+        layout.addWidget(self.email_input)
+        layout.addWidget(self.sifre_input)
+        layout.addWidget(self.sifre2_input)
+        layout.addWidget(self.dogum_input)
+        layout.addWidget(self.cinsiyet_input)
+        layout.addWidget(self.ulke_input)
+        layout.addWidget(tur_label)
+        layout.addWidget(self.tur_listesi)
+        layout.addWidget(kayit_btn)
+        layout.addWidget(geri_btn)
+        layout.addWidget(self.hata_label)
+        self.setLayout(layout)
+
+    def turleri_yukle(self):
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("SELECT tur_id, tur_adi FROM tur ORDER BY tur_adi")
+            for tur_id, tur_adi in cursor.fetchall():
+                item = QListWidgetItem(tur_adi)
+                item.setData(Qt.UserRole, tur_id)
+                self.tur_listesi.addItem(item)
+            cursor.close()
+            conn.close()
+        except Exception as e:
+            print(f"Tür yükleme hatası: {e}")
+
+    def kayit_ol(self):
+        ad = self.ad_input.text().strip()
+        soyad = self.soyad_input.text().strip()
+        email = self.email_input.text().strip()
+        sifre = self.sifre_input.text().strip()
+        sifre2 = self.sifre2_input.text().strip()
+        dogum = self.dogum_input.date()
+        dogum_str = dogum.toString("yyyy-MM-dd")
+        cinsiyet = self.cinsiyet_input.currentText()
+        ulke = self.ulke_input.text().strip()
+        secilen_turler = self.tur_listesi.selectedItems()
+        if not all([ad, soyad, email, sifre, sifre2, ulke]):
+            self.hata_label.setText("Lütfen tüm alanları doldurun!")
+            return
+        bugun = QDate(2026, 5, 18)
+        if dogum > bugun:
+            self.hata_label.setText("Doğum tarihi bugünden büyük olamaz!")
+            return
+        if sifre != sifre2:
+            self.hata_label.setText("Şifreler eşleşmiyor!")
+            return
+        if len(sifre) < 6:
+            self.hata_label.setText("Şifre en az 6 karakter olmalı!")
+            return
+        if len(secilen_turler) != 3:
+            self.hata_label.setText("Lütfen tam olarak 3 tür seçin!")
+            return
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("SELECT kullanici_id FROM kullanici WHERE email=%s", (email,))
+            if cursor.fetchone():
+                self.hata_label.setText("Bu email zaten kayıtlı!")
+                cursor.close()
+                conn.close()
+                return
+            cursor.execute("INSERT INTO kullanici (ad, soyad, email, sifre, dogum_tarihi, cinsiyet, ulke, rol_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                           (ad, soyad, email, sifre, dogum_str, cinsiyet, ulke, 2))
+            kullanici_id = cursor.lastrowid
+            for item in secilen_turler:
+                tur_id = item.data(Qt.UserRole)
+                cursor.execute("INSERT INTO kullanici_tur (kullanici_id, tur_id) VALUES (%s,%s)", (kullanici_id, tur_id))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            self.hata_label.setStyleSheet("color: green;")
+            self.hata_label.setText("Kayıt başarılı! Giriş yapabilirsiniz.")
+        except Exception as e:
+            self.hata_label.setText(f"Hata: {e}")
+
+    def geri_don(self):
+        self.close()
+        self.login_ekrani.show()
+
+
+# ANA SAYFA
+class AnaSayfa(QWidget):
+    def __init__(self, kullanici_id, kullanici_adi, rol_id):
+        super().__init__()
+        self.kullanici_id = kullanici_id
+        self.kullanici_adi = kullanici_adi
+        self.rol_id = rol_id
+        self.setWindowTitle("Netflix")
+        self.setMinimumSize(1000, 600)
+        self.setStyleSheet("background-color: #141414; color: white;")
+        self.setup_ui()
+
+    def setup_ui(self):
+        ana_layout = QVBoxLayout()
+        ana_layout.setSpacing(0)
+        ana_layout.setContentsMargins(0, 0, 0, 0)
+        ust_bar = QWidget()
+        ust_bar.setStyleSheet("background-color: #000; padding: 10px;")
+        ust_layout = QHBoxLayout()
+        baslik = QLabel("🎬 NETFLIX")
+        baslik.setStyleSheet("color: #E50914; font-size: 22px; font-weight: bold;")
+        hosgeldin = QLabel(f"👤 {self.kullanici_adi}")
+        hosgeldin.setStyleSheet("color: white; font-size: 14px;")
+        profil_btn = QPushButton("👤 Profil")
+        profil_btn.setStyleSheet("background: #333; color: white; padding: 6px 12px; border-radius: 4px;")
+        profil_btn.clicked.connect(self.profil_ac)
+        favori_btn = QPushButton("❤️ Favorilerim")
+        favori_btn.setStyleSheet("background: #333; color: white; padding: 6px 12px; border-radius: 4px;")
+        favori_btn.clicked.connect(self.favoriler_ac)
+        gecmis_btn = QPushButton("🕐 Geçmişim")
+        gecmis_btn.setStyleSheet("background: #333; color: white; padding: 6px 12px; border-radius: 4px;")
+        gecmis_btn.clicked.connect(self.gecmis_ac)
+        oneri_btn = QPushButton("🎯 Öneriler")
+        oneri_btn.setStyleSheet("background: #333; color: white; padding: 6px 12px; border-radius: 4px;")
+        oneri_btn.clicked.connect(self.oneriler_ac)
+        cikis_btn = QPushButton("Çıkış")
+        cikis_btn.setStyleSheet("background: #555; color: white; padding: 6px 12px; border-radius: 4px;")
+        cikis_btn.clicked.connect(self.cikis_yap)
+        ust_layout.addWidget(baslik)
+        ust_layout.addStretch()
+        ust_layout.addWidget(hosgeldin)
+        ust_layout.addWidget(profil_btn)
+        ust_layout.addWidget(favori_btn)
+        ust_layout.addWidget(gecmis_btn)
+        ust_layout.addWidget(oneri_btn)
+        if self.rol_id == 1:
+            admin_btn = QPushButton("⚙️ Admin Panel")
+            admin_btn.setStyleSheet("background: #E50914; color: white; padding: 6px 12px; border-radius: 4px;")
+            admin_btn.clicked.connect(self.admin_ac)
+            ust_layout.addWidget(admin_btn)
+        ust_layout.addWidget(cikis_btn)
+        ust_bar.setLayout(ust_layout)
+        filtre_widget = QWidget()
+        filtre_widget.setStyleSheet("background-color: #1a1a1a; padding: 8px;")
+        filtre_layout = QHBoxLayout()
+        filtre_layout.setSpacing(8)
+        self.arama_input = QLineEdit()
+        self.arama_input.setPlaceholderText("🔍 İçerik ara...")
+        self.arama_input.setStyleSheet("padding: 6px; background: #333; color: white; border-radius: 4px; min-width: 150px;")
+        self.arama_input.textChanged.connect(self.filtrele)
+        self.tip_combo = QComboBox()
+        self.tip_combo.addItems(["Tümü", "Film", "Dizi"])
+        self.tip_combo.setStyleSheet("padding: 6px; background: #333; color: white; border-radius: 4px;")
+        self.tip_combo.currentTextChanged.connect(self.filtrele)
+        self.tur_combo = QComboBox()
+        self.tur_combo.addItem("Tüm Türler", 0)
+        self.turleri_yukle()
+        self.tur_combo.setStyleSheet("padding: 6px; background: #333; color: white; border-radius: 4px;")
+        self.tur_combo.currentTextChanged.connect(self.filtrele)
+        yil_label = QLabel("Yıl:")
+        yil_label.setStyleSheet("color: #aaa; font-size: 12px;")
+        self.yil_input = QLineEdit()
+        self.yil_input.setPlaceholderText("örn: 2020")
+        self.yil_input.setStyleSheet("padding: 6px; background: #333; color: white; border-radius: 4px;")
+        self.yil_input.setMaximumWidth(80)
+        self.yil_input.textChanged.connect(self.filtrele)
+        puan_label = QLabel("Min Puan:")
+        puan_label.setStyleSheet("color: #aaa; font-size: 12px;")
+        self.min_puan_input = QDoubleSpinBox()
+        self.min_puan_input.setRange(0, 10)
+        self.min_puan_input.setValue(0)
+        self.min_puan_input.setSingleStep(0.5)
+        self.min_puan_input.setStyleSheet("padding: 6px; background: #333; color: white; border-radius: 4px;")
+        self.min_puan_input.setMaximumWidth(70)
+        self.min_puan_input.valueChanged.connect(self.filtrele)
+        self.siralama_combo = QComboBox()
+        self.siralama_combo.addItems(["Varsayılan", "En Çok İzlenen", "En Yüksek Puanlı"])
+        self.siralama_combo.setStyleSheet("padding: 6px; background: #333; color: white; border-radius: 4px;")
+        self.siralama_combo.currentTextChanged.connect(self.filtrele)
+        filtre_layout.addWidget(self.arama_input)
+        filtre_layout.addWidget(self.tip_combo)
+        filtre_layout.addWidget(self.tur_combo)
+        filtre_layout.addWidget(yil_label)
+        filtre_layout.addWidget(self.yil_input)
+        filtre_layout.addWidget(puan_label)
+        filtre_layout.addWidget(self.min_puan_input)
+        filtre_layout.addWidget(self.siralama_combo)
+        filtre_layout.addStretch()
+        filtre_widget.setLayout(filtre_layout)
+        self.tablo = QTableWidget()
+        self.tablo.setColumnCount(6)
+        self.tablo.setHorizontalHeaderLabels(["ID", "Ad", "Tür", "Tip", "Yayın Yılı", "Ort. Puan"])
+        self.tablo.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.tablo.setStyleSheet("background: #1a1a1a; color: white; gridline-color: #333;")
+        self.tablo.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.tablo.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.tablo.doubleClicked.connect(self.detay_ac)
+        self.tablo.verticalHeader().setVisible(False)
+        ana_layout.addWidget(ust_bar)
+        ana_layout.addWidget(filtre_widget)
+        ana_layout.addWidget(self.tablo)
+        self.setLayout(ana_layout)
+        self.icerikleri_yukle()
+
+    def turleri_yukle(self):
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("SELECT tur_id, tur_adi FROM tur ORDER BY tur_adi")
+            for tur_id, tur_adi in cursor.fetchall():
+                self.tur_combo.addItem(tur_adi, tur_id)
+            cursor.close()
+            conn.close()
+        except Exception as e:
+            print(f"Tür yükleme hatası: {e}")
+
+    def icerikleri_yukle(self, arama="", tip="Tümü", tur_id=0, siralama="Varsayılan", yil="", min_puan=0):
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            query = """
+                SELECT p.program_id, p.ad,
+                       GROUP_CONCAT(DISTINCT t.tur_adi SEPARATOR ', ') as turler,
+                       p.tip, p.yayin_yili,
+                       COALESCE(ROUND(AVG(pu.skor), 1), 0) as ort_puan
+                FROM program p
+                LEFT JOIN program_tur pt ON p.program_id = pt.program_id
+                LEFT JOIN tur t ON pt.tur_id = t.tur_id
+                LEFT JOIN puan pu ON p.program_id = pu.program_id
+                WHERE 1=1
+            """
+            params = []
+            if arama:
+                query += " AND p.ad LIKE %s"
+                params.append(f"%{arama}%")
+            if tip != "Tümü":
+                query += " AND p.tip = %s"
+                params.append(tip)
+            if tur_id:
+                query += " AND pt.tur_id = %s"
+                params.append(tur_id)
+            if yil.strip():
+                query += " AND p.yayin_yili = %s"
+                params.append(yil.strip())
+            query += " GROUP BY p.program_id"
+            if min_puan > 0:
+                query += " HAVING ort_puan >= %s"
+                params.append(min_puan)
+            if siralama == "En Çok İzlenen":
+                query += " ORDER BY p.izlenme_sayisi DESC"
+            elif siralama == "En Yüksek Puanlı":
+                query += " ORDER BY ort_puan DESC"
+            else:
+                query += " ORDER BY p.ad"
+            cursor.execute(query, params)
+            sonuclar = cursor.fetchall()
+            cursor.close()
+            conn.close()
+            self.tablo.setRowCount(len(sonuclar))
+            for i, row in enumerate(sonuclar):
+                for j in range(5):
+                    val = row[j]
+                    item = QTableWidgetItem(str(val) if val else "")
+                    item.setTextAlignment(Qt.AlignCenter)
+                    self.tablo.setItem(i, j, item)
+                puan_val = row[5]
+                puan_str = f"{puan_val}/10" if puan_val and float(puan_val) > 0 else "-"
+                puan_item = QTableWidgetItem(puan_str)
+                puan_item.setTextAlignment(Qt.AlignCenter)
+                self.tablo.setItem(i, 5, puan_item)
+        except Exception as e:
+            print(f"İçerik yükleme hatası: {e}")
+
+    def filtrele(self):
+        self.icerikleri_yukle(
+            self.arama_input.text(), self.tip_combo.currentText(),
+            self.tur_combo.currentData(), self.siralama_combo.currentText(),
+            self.yil_input.text(), self.min_puan_input.value()
+        )
+
+    def detay_ac(self):
+        secili = self.tablo.currentRow()
+        if secili >= 0:
+            program_id = int(self.tablo.item(secili, 0).text())
+            program_adi = self.tablo.item(secili, 1).text()
+            self.detay = DetayEkrani(program_id, program_adi, self.kullanici_id)
+            self.detay.show()
+
+    def profil_ac(self):
+        self.profil = ProfilEkrani(self.kullanici_id)
+        self.profil.show()
+
+    def favoriler_ac(self):
+        self.favoriler = FavorilerEkrani(self.kullanici_id)
+        self.favoriler.show()
+
+    def gecmis_ac(self):
+        self.gecmis = GecmisEkrani(self.kullanici_id)
+        self.gecmis.show()
+
+    def oneriler_ac(self):
+        self.oneriler = OneriEkrani(self.kullanici_id)
+        self.oneriler.show()
+
+    def admin_ac(self):
+        self.admin = AdminEkrani(self.kullanici_id)
+        self.admin.show()
+
+    def cikis_yap(self):
+        self.login = LoginEkrani()
+        self.login.show()
+        self.close()
+
+
+# DETAY EKRANI
+class DetayEkrani(QWidget):
+    def __init__(self, program_id, program_adi, kullanici_id):
+        super().__init__()
+        self.program_id = program_id
+        self.program_adi = program_adi
+        self.kullanici_id = kullanici_id
+        self.setWindowTitle(f"Netflix - {program_adi}")
+        self.setFixedSize(500, 620)
+        self.setStyleSheet("background-color: #141414; color: white;")
+        self.setup_ui()
+
+    def setup_ui(self):
+        layout = QVBoxLayout()
+        layout.setSpacing(10)
+        layout.setContentsMargins(30, 30, 30, 30)
+        baslik = QLabel(self.program_adi)
+        baslik.setStyleSheet("font-size: 20px; font-weight: bold; color: #E50914;")
+        baslik.setAlignment(Qt.AlignCenter)
+        baslik.setWordWrap(True)
+        self.bilgi_label = QLabel("")
+        self.bilgi_label.setStyleSheet("color: #aaa; font-size: 13px;")
+        self.bilgi_label.setAlignment(Qt.AlignCenter)
+        self.bilgi_label.setWordWrap(True)
+        self.puan_label = QLabel("")
+        self.puan_label.setStyleSheet("color: #f5c518; font-size: 14px; font-weight: bold;")
+        self.puan_label.setAlignment(Qt.AlignCenter)
+        self.aciklama_label = QLabel("")
+        self.aciklama_label.setStyleSheet("color: #ccc; font-size: 12px; background: #1a1a1a; padding: 8px; border-radius: 4px;")
+        self.aciklama_label.setWordWrap(True)
+        self.aciklama_label.setMinimumHeight(50)
+        self.kalinan_label = QLabel("")
+        self.kalinan_label.setStyleSheet("color: #4CAF50; font-size: 12px; font-weight: bold;")
+        self.kalinan_label.setAlignment(Qt.AlignCenter)
+        self.kalinan_label.setVisible(False)
+        self.devam_btn = QPushButton("⏩ Kaldığı Yerden Devam Et")
+        self.devam_btn.setStyleSheet("background: #4CAF50; color: white; padding: 8px; border-radius: 4px; font-weight: bold;")
+        self.devam_btn.clicked.connect(self.kaldigi_yerden_devam)
+        self.devam_btn.setVisible(False)
+        self.favori_btn = QPushButton("❤️ Favoriye Ekle")
+        self.favori_btn.setStyleSheet("background: #333; color: white; padding: 8px; border-radius: 4px;")
+        self.favori_btn.clicked.connect(self.favori_toggle)
+        puan_baslik = QLabel("Puan Ver (1-10):")
+        puan_baslik.setStyleSheet("color: white;")
+        self.puan_input = QSpinBox()
+        self.puan_input.setRange(1, 10)
+        self.puan_input.setValue(5)
+        self.puan_input.setStyleSheet("background: #333; color: white; padding: 4px;")
+        self.puan_btn = QPushButton("⭐ Puanla")
+        self.puan_btn.setStyleSheet("background: #f5c518; color: black; padding: 8px; border-radius: 4px; font-weight: bold;")
+        self.puan_btn.clicked.connect(self.puan_ver)
+        izle_btn = QPushButton("▶️ İzlemeye Başla")
+        izle_btn.setStyleSheet("background: #E50914; color: white; padding: 10px; border-radius: 4px; font-weight: bold; font-size: 14px;")
+        izle_btn.clicked.connect(self.izlemeye_basla)
+        self.sonuc_label = QLabel("")
+        self.sonuc_label.setAlignment(Qt.AlignCenter)
+        self.sonuc_label.setStyleSheet("color: green;")
+        self.sonuc_label.setWordWrap(True)
+        layout.addWidget(baslik)
+        layout.addWidget(self.bilgi_label)
+        layout.addWidget(self.puan_label)
+        layout.addWidget(self.aciklama_label)
+        layout.addWidget(self.kalinan_label)
+        layout.addWidget(self.devam_btn)
+        layout.addWidget(self.favori_btn)
+        layout.addWidget(puan_baslik)
+        layout.addWidget(self.puan_input)
+        layout.addWidget(self.puan_btn)
+        layout.addWidget(izle_btn)
+        layout.addWidget(self.sonuc_label)
+        self.setLayout(layout)
+        self.bilgileri_yukle()
+        self.favori_durumu_kontrol()
+
+    def bilgileri_yukle(self):
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("""
+                SELECT p.tip, p.yayin_yili, p.izlenme_sayisi,
+                       GROUP_CONCAT(t.tur_adi SEPARATOR ', '),
+                       AVG(pu.skor), p.aciklama
+                FROM program p
+                LEFT JOIN program_tur pt ON p.program_id = pt.program_id
+                LEFT JOIN tur t ON pt.tur_id = t.tur_id
+                LEFT JOIN puan pu ON p.program_id = pu.program_id
+                WHERE p.program_id = %s GROUP BY p.program_id
+            """, (self.program_id,))
+            row = cursor.fetchone()
+            if row:
+                self.bilgi_label.setText(f"Tür: {row[3] or 'Bilinmiyor'}  |  Tip: {row[0]}  |  Yıl: {row[1] or '-'}  |  İzlenme: {row[2] or 0}")
+                self.puan_label.setText(f"⭐ Ortalama Puan: {f'{row[4]:.1f}' if row[4] else 'Henüz puanlanmadı'}")
+                self.aciklama_label.setText(f"📖 {row[5]}" if row[5] else "📖 Açıklama henüz eklenmemiş.")
+                if row[0] == "Dizi":
+                    cursor.execute("SELECT kalinan_bolum, kalinan_sure FROM izleme_gecmisi WHERE kullanici_id=%s AND program_id=%s",
+                                   (self.kullanici_id, self.program_id))
+                    gecmis = cursor.fetchone()
+                    if gecmis and gecmis[0]:
+                        sure_sn = gecmis[1] or 0
+                        self.kalinan_label.setText(f"📍 Kaldığınız yer: Bölüm {gecmis[0]} — {sure_sn//60:02d}:{sure_sn%60:02d}")
+                        self.kalinan_label.setVisible(True)
+                        self.devam_btn.setVisible(True)
+            cursor.execute("SELECT skor FROM puan WHERE kullanici_id=%s AND program_id=%s", (self.kullanici_id, self.program_id))
+            mevcut_puan = cursor.fetchone()
+            if mevcut_puan:
+                self.puan_btn.setEnabled(False)
+                self.puan_btn.setText(f"✅ Puanlandı: {mevcut_puan[0]}/10")
+                self.puan_btn.setStyleSheet("background: #555; color: #aaa; padding: 8px; border-radius: 4px;")
+                self.puan_input.setEnabled(False)
+            cursor.close()
+            conn.close()
+        except Exception as e:
+            print(f"Bilgi yükleme hatası: {e}")
+
+    def favori_durumu_kontrol(self):
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("SELECT fav_id FROM favori WHERE kullanici_id=%s AND program_id=%s", (self.kullanici_id, self.program_id))
+            if cursor.fetchone():
+                self.favori_btn.setText("💔 Favoriden Çıkar")
+                self.favori_btn.setStyleSheet("background: #E50914; color: white; padding: 8px; border-radius: 4px;")
+            cursor.close()
+            conn.close()
+        except Exception as e:
+            print(f"Favori kontrol hatası: {e}")
+
+    def favori_toggle(self):
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("SELECT fav_id FROM favori WHERE kullanici_id=%s AND program_id=%s", (self.kullanici_id, self.program_id))
+            if cursor.fetchone():
+                cursor.execute("DELETE FROM favori WHERE kullanici_id=%s AND program_id=%s", (self.kullanici_id, self.program_id))
+                self.favori_btn.setText("❤️ Favoriye Ekle")
+                self.favori_btn.setStyleSheet("background: #333; color: white; padding: 8px; border-radius: 4px;")
+                self.sonuc_label.setStyleSheet("color: orange;")
+                self.sonuc_label.setText("Favorilerden çıkarıldı.")
+            else:
+                cursor.execute("INSERT INTO favori (kullanici_id, program_id) VALUES (%s, %s)", (self.kullanici_id, self.program_id))
+                self.favori_btn.setText("💔 Favoriden Çıkar")
+                self.favori_btn.setStyleSheet("background: #E50914; color: white; padding: 8px; border-radius: 4px;")
+                self.sonuc_label.setStyleSheet("color: green;")
+                self.sonuc_label.setText("Favorilere eklendi!")
+            conn.commit()
+            cursor.close()
+            conn.close()
+        except Exception as e:
+            self.sonuc_label.setText(f"Hata: {e}")
+
+    def puan_ver(self):
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("SELECT puan_id FROM puan WHERE kullanici_id=%s AND program_id=%s", (self.kullanici_id, self.program_id))
+            if cursor.fetchone():
+                self.sonuc_label.setStyleSheet("color: red;")
+                self.sonuc_label.setText("Bu içeriği zaten puanladınız!")
+                cursor.close()
+                conn.close()
+                return
+            skor = self.puan_input.value()
+            cursor.execute("INSERT INTO puan (kullanici_id, program_id, skor) VALUES (%s, %s, %s)", (self.kullanici_id, self.program_id, skor))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            self.sonuc_label.setStyleSheet("color: green;")
+            self.sonuc_label.setText(f"Puanınız kaydedildi: {skor}/10 ⭐")
+            self.puan_btn.setEnabled(False)
+            self.puan_btn.setText(f"✅ Puanlandı: {skor}/10")
+            self.puan_btn.setStyleSheet("background: #555; color: #aaa; padding: 8px; border-radius: 4px;")
+            self.puan_input.setEnabled(False)
+            self.bilgileri_yukle()
+        except Exception as e:
+            self.sonuc_label.setStyleSheet("color: red;")
+            self.sonuc_label.setText(f"Hata: {e}")
+
+    def kaldigi_yerden_devam(self):
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("SELECT kalinan_bolum, kalinan_sure FROM izleme_gecmisi WHERE kullanici_id=%s AND program_id=%s",
+                           (self.kullanici_id, self.program_id))
+            gecmis = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            if gecmis:
+                bolum_no = gecmis[0]
+                kalinan_sure = gecmis[1] or 0
+                bolumler = {1: "bolum1.mp4", 2: "bolum2.mp4", 3: "bolum3.mp4"}
+                video = os.path.join("videos", bolumler.get(bolum_no, "bolum1.mp4"))
+                if not os.path.exists(video):
+                    self.sonuc_label.setStyleSheet("color: red;")
+                    self.sonuc_label.setText("Video dosyası bulunamadı!")
+                    return
+                self.player = VideoOynatici(video, self.program_adi, kullanici_id=self.kullanici_id,
+                                            program_id=self.program_id, baslangic_sure=kalinan_sure)
+                self.player.show()
+                self.sonuc_label.setStyleSheet("color: green;")
+                self.sonuc_label.setText(f"▶️ Bölüm {bolum_no}'den devam ediliyor...")
+        except Exception as e:
+            self.sonuc_label.setStyleSheet("color: red;")
+            self.sonuc_label.setText(f"Hata: {e}")
+
+    def izlemeye_basla(self):
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("SELECT tip FROM program WHERE program_id=%s", (self.program_id,))
+            row = cursor.fetchone()
+            tip = row[0] if row else "Film"
+            cursor.close()
+            if tip == "Film":
+                video = os.path.join("videos", "film.mp4")
+                if not os.path.exists(video):
+                    self.sonuc_label.setStyleSheet("color: red;")
+                    self.sonuc_label.setText("Video dosyası bulunamadı!")
+                    conn.close()
+                    return
+                self._video_baslat(video, conn, 1, 0)
+            else:
+                bolumler = {"Bölüm 1": "bolum1.mp4", "Bölüm 2": "bolum2.mp4", "Bölüm 3": "bolum3.mp4"}
+                cursor2 = conn.cursor(buffered=True)
+                cursor2.execute("SELECT kalinan_bolum, kalinan_sure FROM izleme_gecmisi WHERE kullanici_id=%s AND program_id=%s",
+                                (self.kullanici_id, self.program_id))
+                gecmis = cursor2.fetchone()
+                cursor2.close()
+                varsayilan = 0
+                if gecmis and gecmis[0]:
+                    kalinan = gecmis[0]
+                    kalinan_adi = f"Bölüm {kalinan}"
+                    sure_sn = gecmis[1] or 0
+                    dk, sn = sure_sn // 60, sure_sn % 60
+                    cevap = QMessageBox.question(self, "Kaldığınız Yer",
+                        f"En son {kalinan_adi} — {dk:02d}:{sn:02d}'de kalmıştınız.\nKaldığınız yerden devam etmek ister misiniz?",
+                        QMessageBox.Yes | QMessageBox.No)
+                    if cevap == QMessageBox.Yes:
+                        video = os.path.join("videos", bolumler[kalinan_adi])
+                        if not os.path.exists(video):
+                            self.sonuc_label.setStyleSheet("color: red;")
+                            self.sonuc_label.setText("Video dosyası bulunamadı!")
+                            conn.close()
+                            return
+                        self._video_baslat(video, conn, kalinan, sure_sn)
+                        return
+                    else:
+                        varsayilan = kalinan - 1
+                secim, ok = QInputDialog.getItem(self, "Bölüm Seç", "Hangi bölümü izlemek istiyorsunuz?",
+                                                  list(bolumler.keys()), varsayilan, False)
+                if ok:
+                    bolum_no = int(secim.split(" ")[1])
+                    video = os.path.join("videos", bolumler[secim])
+                    if not os.path.exists(video):
+                        self.sonuc_label.setStyleSheet("color: red;")
+                        self.sonuc_label.setText("Video dosyası bulunamadı!")
+                        conn.close()
+                        return
+                    self._video_baslat(video, conn, bolum_no, 0)
+                else:
+                    conn.close()
+        except Exception as e:
+            self.sonuc_label.setStyleSheet("color: red;")
+            self.sonuc_label.setText(f"Hata: {e}")
+
+    def _video_baslat(self, video, conn, bolum_no=1, baslangic_sure=0):
+        try:
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("UPDATE program SET izlenme_sayisi = izlenme_sayisi + 1 WHERE program_id = %s", (self.program_id,))
+            cursor.execute("""INSERT INTO izleme_gecmisi (kullanici_id, program_id, kalinan_bolum, kalinan_sure)
+                VALUES (%s, %s, %s, %s) ON DUPLICATE KEY UPDATE son_izleme=NOW(), kalinan_bolum=%s, kalinan_sure=%s""",
+                (self.kullanici_id, self.program_id, bolum_no, baslangic_sure, bolum_no, baslangic_sure))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            self.player = VideoOynatici(video, self.program_adi, kullanici_id=self.kullanici_id,
+                                        program_id=self.program_id, baslangic_sure=baslangic_sure)
+            self.player.show()
+            self.sonuc_label.setStyleSheet("color: green;")
+            self.sonuc_label.setText("▶️ Video açılıyor...")
+        except Exception as e:
+            self.sonuc_label.setStyleSheet("color: red;")
+            self.sonuc_label.setText(f"Hata: {e}")
+
+
+# PROFİL EKRANI
+class ProfilEkrani(QWidget):
+    def __init__(self, kullanici_id):
+        super().__init__()
+        self.kullanici_id = kullanici_id
+        self.setWindowTitle("Netflix - Profilim")
+        self.setFixedSize(500, 650)
+        self.setStyleSheet("background-color: #141414; color: white;")
+        self.setup_ui()
+
+    def setup_ui(self):
+        layout = QVBoxLayout()
+        layout.setSpacing(10)
+        layout.setContentsMargins(40, 30, 40, 30)
+        baslik = QLabel("👤 Profilim")
+        baslik.setStyleSheet("font-size: 20px; font-weight: bold; color: #E50914;")
+        baslik.setAlignment(Qt.AlignCenter)
+        self.istatistik_label = QLabel("")
+        self.istatistik_label.setStyleSheet("color: #ccc; font-size: 12px; background: #1a1a1a; padding: 10px; border-radius: 4px;")
+        self.istatistik_label.setWordWrap(True)
+        ayrac = QLabel("✏️ Bilgilerimi Güncelle")
+        ayrac.setStyleSheet("color: #aaa; font-size: 13px; font-weight: bold;")
+        ayrac.setAlignment(Qt.AlignCenter)
+        input_style = "padding: 8px; border-radius: 4px; background: #333; color: white;"
+        self.ad_input = QLineEdit()
+        self.ad_input.setPlaceholderText("Ad")
+        self.ad_input.setStyleSheet(input_style)
+        self.soyad_input = QLineEdit()
+        self.soyad_input.setPlaceholderText("Soyad")
+        self.soyad_input.setStyleSheet(input_style)
+        self.email_input = QLineEdit()
+        self.email_input.setPlaceholderText("Email")
+        self.email_input.setStyleSheet(input_style)
+        self.ulke_input = QLineEdit()
+        self.ulke_input.setPlaceholderText("Ülke")
+        self.ulke_input.setStyleSheet(input_style)
+        self.sifre_input = QLineEdit()
+        self.sifre_input.setPlaceholderText("Yeni Şifre (değiştirmek istemiyorsanız boş bırakın)")
+        self.sifre_input.setEchoMode(QLineEdit.Password)
+        self.sifre_input.setStyleSheet(input_style)
+        kaydet_btn = QPushButton("💾 Kaydet")
+        kaydet_btn.setStyleSheet("background: #E50914; color: white; padding: 10px; border-radius: 4px; font-weight: bold;")
+        kaydet_btn.clicked.connect(self.kaydet)
+        self.sonuc_label = QLabel("")
+        self.sonuc_label.setAlignment(Qt.AlignCenter)
+        self.sonuc_label.setWordWrap(True)
+        layout.addWidget(baslik)
+        layout.addWidget(self.istatistik_label)
+        layout.addWidget(ayrac)
+        layout.addWidget(self.ad_input)
+        layout.addWidget(self.soyad_input)
+        layout.addWidget(self.email_input)
+        layout.addWidget(self.ulke_input)
+        layout.addWidget(self.sifre_input)
+        layout.addWidget(kaydet_btn)
+        layout.addWidget(self.sonuc_label)
+        self.setLayout(layout)
+        self.bilgileri_yukle()
+
+    def bilgileri_yukle(self):
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("SELECT ad, soyad, email, ulke, dogum_tarihi FROM kullanici WHERE kullanici_id=%s", (self.kullanici_id,))
+            row = cursor.fetchone()
+            if row:
+                self.ad_input.setText(row[0] or "")
+                self.soyad_input.setText(row[1] or "")
+                self.email_input.setText(row[2] or "")
+                self.ulke_input.setText(row[3] or "")
+                dogum = row[4]
+            cursor.execute("SELECT t.tur_adi FROM kullanici_tur kt JOIN tur t ON kt.tur_id = t.tur_id WHERE kt.kullanici_id = %s", (self.kullanici_id,))
+            turler = [r[0] for r in cursor.fetchall()]
+            cursor.execute("SELECT COUNT(*) FROM izleme_gecmisi WHERE kullanici_id = %s", (self.kullanici_id,))
+            izleme_sayisi = cursor.fetchone()[0]
+            cursor.execute("SELECT ROUND(AVG(skor), 1) FROM puan WHERE kullanici_id = %s", (self.kullanici_id,))
+            ort_puan = cursor.fetchone()[0]
+            cursor.close()
+            conn.close()
+            dogum_str = dogum.strftime("%d/%m/%Y") if dogum and hasattr(dogum, 'strftime') else "Belirtilmemiş"
+            self.istatistik_label.setText(
+                f"🎂 Doğum Tarihi: {dogum_str}\n\n"
+                f"🎭 Favori Türler: {', '.join(turler) if turler else 'Belirtilmemiş'}\n\n"
+                f"🎬 İzlenen İçerik Sayısı: {izleme_sayisi}\n\n"
+                f"⭐ Verilen Ortalama Puan: {f'{ort_puan}/10' if ort_puan else 'Henüz puan verilmedi'}"
+            )
+        except Exception as e:
+            print(f"Profil yükleme hatası: {e}")
+
+    def kaydet(self):
+        ad = self.ad_input.text().strip()
+        soyad = self.soyad_input.text().strip()
+        email = self.email_input.text().strip()
+        ulke = self.ulke_input.text().strip()
+        sifre = self.sifre_input.text().strip()
+        if not all([ad, soyad, email, ulke]):
+            self.sonuc_label.setStyleSheet("color: red;")
+            self.sonuc_label.setText("Lütfen tüm alanları doldurun!")
+            return
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            if sifre:
+                cursor.execute("UPDATE kullanici SET ad=%s, soyad=%s, email=%s, ulke=%s, sifre=%s WHERE kullanici_id=%s",
+                               (ad, soyad, email, ulke, sifre, self.kullanici_id))
+            else:
+                cursor.execute("UPDATE kullanici SET ad=%s, soyad=%s, email=%s, ulke=%s WHERE kullanici_id=%s",
+                               (ad, soyad, email, ulke, self.kullanici_id))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            self.sonuc_label.setStyleSheet("color: green;")
+            self.sonuc_label.setText("Profil başarıyla güncellendi!")
+            self.bilgileri_yukle()
+        except Exception as e:
+            self.sonuc_label.setStyleSheet("color: red;")
+            self.sonuc_label.setText(f"Hata: {e}")
+
+
+# FAVORİLER EKRANI
+class FavorilerEkrani(QWidget):
+    def __init__(self, kullanici_id):
+        super().__init__()
+        self.kullanici_id = kullanici_id
+        self.setWindowTitle("Netflix - Favorilerim")
+        self.setMinimumSize(650, 450)
+        self.setStyleSheet("background-color: #141414; color: white;")
+        self.setup_ui()
+
+    def setup_ui(self):
+        layout = QVBoxLayout()
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(10)
+        baslik = QLabel("❤️ Favorilerim")
+        baslik.setStyleSheet("font-size: 18px; font-weight: bold; color: #E50914;")
+        baslik.setAlignment(Qt.AlignCenter)
+        filtre_widget = QWidget()
+        filtre_widget.setStyleSheet("background: #1a1a1a; padding: 8px; border-radius: 4px;")
+        filtre_layout = QHBoxLayout()
+        tur_label = QLabel("Türe Göre Filtrele:")
+        tur_label.setStyleSheet("color: #aaa; font-size: 12px;")
+        self.tur_combo = QComboBox()
+        self.tur_combo.addItem("Tüm Türler", 0)
+        self.tur_combo.setStyleSheet("padding: 6px; background: #333; color: white; border-radius: 4px; min-width: 150px;")
+        self.tur_combo.currentTextChanged.connect(self.filtrele)
+        self.turleri_yukle()
+        self.sayi_label = QLabel("")
+        self.sayi_label.setStyleSheet("color: #aaa; font-size: 12px;")
+        filtre_layout.addWidget(tur_label)
+        filtre_layout.addWidget(self.tur_combo)
+        filtre_layout.addStretch()
+        filtre_layout.addWidget(self.sayi_label)
+        filtre_widget.setLayout(filtre_layout)
+        self.tablo = QTableWidget()
+        self.tablo.setColumnCount(4)
+        self.tablo.setHorizontalHeaderLabels(["ID", "İçerik Adı", "Tür", "Tip"])
+        self.tablo.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.tablo.setStyleSheet("background: #1a1a1a; color: white; gridline-color: #333;")
+        self.tablo.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.tablo.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.tablo.verticalHeader().setVisible(False)
+        self.tablo.doubleClicked.connect(self.detay_ac)
+        sil_btn = QPushButton("🗑️ Seçiliyi Favoriden Çıkar")
+        sil_btn.setStyleSheet("background: #E50914; color: white; padding: 8px; border-radius: 4px;")
+        sil_btn.clicked.connect(self.favoriden_cikar)
+        self.sonuc_label = QLabel("")
+        self.sonuc_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(baslik)
+        layout.addWidget(filtre_widget)
+        layout.addWidget(self.tablo)
+        layout.addWidget(sil_btn)
+        layout.addWidget(self.sonuc_label)
+        self.setLayout(layout)
+        self.favorileri_yukle()
+
+    def turleri_yukle(self):
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("""SELECT DISTINCT t.tur_id, t.tur_adi FROM favori f
+                JOIN program_tur pt ON f.program_id = pt.program_id
+                JOIN tur t ON pt.tur_id = t.tur_id
+                WHERE f.kullanici_id = %s ORDER BY t.tur_adi""", (self.kullanici_id,))
+            for tur_id, tur_adi in cursor.fetchall():
+                self.tur_combo.addItem(tur_adi, tur_id)
+            cursor.close()
+            conn.close()
+        except Exception as e:
+            print(f"Tür yükleme hatası: {e}")
+
+    def favorileri_yukle(self, tur_id=0):
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            query = """SELECT p.program_id, p.ad, GROUP_CONCAT(DISTINCT t.tur_adi SEPARATOR ', '), p.tip
+                FROM favori f JOIN program p ON f.program_id = p.program_id
+                LEFT JOIN program_tur pt ON p.program_id = pt.program_id
+                LEFT JOIN tur t ON pt.tur_id = t.tur_id
+                WHERE f.kullanici_id = %s"""
+            params = [self.kullanici_id]
+            if tur_id:
+                query += " AND pt.tur_id = %s"
+                params.append(tur_id)
+            query += " GROUP BY p.program_id ORDER BY p.ad"
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            cursor.close()
+            conn.close()
+            self.tablo.setRowCount(len(rows))
+            for i, row in enumerate(rows):
+                for j, val in enumerate(row):
+                    item = QTableWidgetItem(str(val) if val else "")
+                    item.setTextAlignment(Qt.AlignCenter)
+                    self.tablo.setItem(i, j, item)
+            self.sayi_label.setText(f"Toplam: {len(rows)} içerik")
+        except Exception as e:
+            print(f"Favori yükleme hatası: {e}")
+
+    def filtrele(self):
+        self.favorileri_yukle(self.tur_combo.currentData() or 0)
+
+    def detay_ac(self):
+        secili = self.tablo.currentRow()
+        if secili >= 0:
+            program_id = int(self.tablo.item(secili, 0).text())
+            program_adi = self.tablo.item(secili, 1).text()
+            self.detay = DetayEkrani(program_id, program_adi, self.kullanici_id)
+            self.detay.show()
+
+    def favoriden_cikar(self):
+        secili = self.tablo.currentRow()
+        if secili < 0:
+            self.sonuc_label.setStyleSheet("color: red;")
+            self.sonuc_label.setText("Lütfen bir içerik seçin!")
+            return
+        program_id = int(self.tablo.item(secili, 0).text())
+        program_adi = self.tablo.item(secili, 1).text()
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("DELETE FROM favori WHERE kullanici_id=%s AND program_id=%s", (self.kullanici_id, program_id))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            self.sonuc_label.setStyleSheet("color: green;")
+            self.sonuc_label.setText(f"'{program_adi}' favorilerden çıkarıldı!")
+            self.tur_combo.blockSignals(True)
+            self.tur_combo.clear()
+            self.tur_combo.addItem("Tüm Türler", 0)
+            self.turleri_yukle()
+            self.tur_combo.blockSignals(False)
+            self.favorileri_yukle()
+        except Exception as e:
+            self.sonuc_label.setStyleSheet("color: red;")
+            self.sonuc_label.setText(f"Hata: {e}")
+
+
+# İZLEME GEÇMİŞİ
+class GecmisEkrani(QWidget):
+    def __init__(self, kullanici_id):
+        super().__init__()
+        self.kullanici_id = kullanici_id
+        self.setWindowTitle("Netflix - İzleme Geçmişim")
+        self.setMinimumSize(850, 450)
+        self.setStyleSheet("background-color: #141414; color: white;")
+        self.setup_ui()
+
+    def setup_ui(self):
+        layout = QVBoxLayout()
+        layout.setContentsMargins(20, 20, 20, 20)
+        baslik = QLabel("🕐 İzleme Geçmişim")
+        baslik.setStyleSheet("font-size: 18px; font-weight: bold; color: #E50914;")
+        baslik.setAlignment(Qt.AlignCenter)
+        self.tablo = QTableWidget()
+        self.tablo.setColumnCount(7)
+        self.tablo.setHorizontalHeaderLabels(["İçerik Adı", "Tip", "İzlenen Bölüm", "İzleme Süresi", "Son İzleme", "Durum", "Verilen Puan"])
+        self.tablo.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.tablo.setStyleSheet("background: #1a1a1a; color: white; gridline-color: #333;")
+        self.tablo.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.tablo.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.tablo.verticalHeader().setVisible(False)
+        temizle_btn = QPushButton("🗑️ Geçmişi Temizle")
+        temizle_btn.setStyleSheet("background: #555; color: white; padding: 8px; border-radius: 4px;")
+        temizle_btn.clicked.connect(self.gecmisi_temizle)
+        self.sonuc_label = QLabel("")
+        self.sonuc_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(baslik)
+        layout.addWidget(self.tablo)
+        layout.addWidget(temizle_btn)
+        layout.addWidget(self.sonuc_label)
+        self.setLayout(layout)
+        self.gecmisi_yukle()
+
+    def gecmisi_yukle(self):
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("""SELECT p.ad, p.tip, ig.kalinan_bolum, ig.kalinan_sure,
+                DATE_FORMAT(ig.son_izleme, '%d/%m/%Y %H:%i'),
+                IF(ig.tamamlandi, 'Tamamlandı ✅', 'Devam Ediyor ▶️'), pu.skor
+                FROM izleme_gecmisi ig JOIN program p ON ig.program_id = p.program_id
+                LEFT JOIN puan pu ON ig.program_id = pu.program_id AND pu.kullanici_id = ig.kullanici_id
+                WHERE ig.kullanici_id = %s ORDER BY ig.son_izleme DESC""", (self.kullanici_id,))
+            rows = cursor.fetchall()
+            cursor.close()
+            conn.close()
+            self.tablo.setRowCount(len(rows))
+            for i, row in enumerate(rows):
+                self.tablo.setItem(i, 0, QTableWidgetItem(str(row[0]) if row[0] else ""))
+                self.tablo.setItem(i, 1, QTableWidgetItem(str(row[1]) if row[1] else ""))
+                bolum = f"Bölüm {row[2]}" if row[1] == "Dizi" and row[2] else "-"
+                self.tablo.setItem(i, 2, QTableWidgetItem(bolum))
+                sure_sn = row[3] or 0
+                self.tablo.setItem(i, 3, QTableWidgetItem(f"{sure_sn//60}dk {sure_sn%60}sn" if sure_sn > 0 else "-"))
+                self.tablo.setItem(i, 4, QTableWidgetItem(str(row[4]) if row[4] else ""))
+                self.tablo.setItem(i, 5, QTableWidgetItem(str(row[5]) if row[5] else ""))
+                self.tablo.setItem(i, 6, QTableWidgetItem(f"{row[6]}/10 ⭐" if row[6] else "Puanlanmadı"))
+                for j in range(7):
+                    item = self.tablo.item(i, j)
+                    if item:
+                        item.setTextAlignment(Qt.AlignCenter)
+        except Exception as e:
+            print(f"Geçmiş yükleme hatası: {e}")
+
+    def gecmisi_temizle(self):
+        cevap = QMessageBox.question(self, "Emin misiniz?", "Tüm izleme geçmişiniz silinecek!", QMessageBox.Yes | QMessageBox.No)
+        if cevap == QMessageBox.Yes:
+            try:
+                conn = get_connection()
+                cursor = conn.cursor(buffered=True)
+                cursor.execute("DELETE FROM izleme_gecmisi WHERE kullanici_id=%s", (self.kullanici_id,))
+                conn.commit()
+                cursor.close()
+                conn.close()
+                self.sonuc_label.setStyleSheet("color: green;")
+                self.sonuc_label.setText("Geçmiş temizlendi!")
+                self.gecmisi_yukle()
+            except Exception as e:
+                self.sonuc_label.setText(f"Hata: {e}")
+
+
+# ÖNERİ EKRANI
+class OneriEkrani(QWidget):
+    def __init__(self, kullanici_id):
+        super().__init__()
+        self.kullanici_id = kullanici_id
+        self.setWindowTitle("Netflix - Önerilen İçerikler")
+        self.setMinimumSize(750, 600)
+        self.setStyleSheet("background-color: #141414; color: white;")
+        self.setup_ui()
+
+    def setup_ui(self):
+        layout = QVBoxLayout()
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(10)
+        baslik = QLabel("🎯 Size Özel İçerik Önerileri")
+        baslik.setStyleSheet("font-size: 18px; font-weight: bold; color: #E50914;")
+        baslik.setAlignment(Qt.AlignCenter)
+        self.tabs = QTabWidget()
+        self.tabs.setStyleSheet("""
+            QTabWidget::pane { border: 1px solid #333; }
+            QTabBar::tab { background: #333; color: white; padding: 6px 12px; }
+            QTabBar::tab:selected { background: #E50914; }
+        """)
+        self.tabs.addTab(self._favori_tur_tab(), "🎭 Favori Türler")
+        self.tabs.addTab(self._yuksek_puan_tur_tab(), "⭐ Puan Verdiğim Türler")
+        self.tabs.addTab(self._en_cok_izlenen_tab(), "🔥 En Çok İzlenenler")
+        self.tabs.addTab(self._benzer_kullanici_tab(), "👥 Benzer Kullanıcılar")
+        bilgi = QLabel("💡 Detay için herhangi bir içeriğe çift tıklayın.")
+        bilgi.setStyleSheet("color: #555; font-size: 11px;")
+        bilgi.setAlignment(Qt.AlignCenter)
+        layout.addWidget(baslik)
+        layout.addWidget(self.tabs)
+        layout.addWidget(bilgi)
+        self.setLayout(layout)
+
+    def _tablo_olustur(self):
+        tablo = QTableWidget()
+        tablo.setColumnCount(4)
+        tablo.setHorizontalHeaderLabels(["#", "İçerik Adı", "Tür", "Ort. Puan"])
+        tablo.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        tablo.setStyleSheet("background: #1a1a1a; color: white; gridline-color: #333;")
+        tablo.setSelectionBehavior(QAbstractItemView.SelectRows)
+        tablo.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        tablo.verticalHeader().setVisible(False)
+        tablo.doubleClicked.connect(lambda: self.detay_ac(tablo))
+        return tablo
+
+    def _favori_tur_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout()
+        layout.setContentsMargins(10, 10, 10, 10)
+        self.tur_label = QLabel("")
+        self.tur_label.setStyleSheet("color: #aaa; font-size: 12px; padding: 4px;")
+        self.tur_label.setWordWrap(True)
+        self.favori_tur_tablo = self._tablo_olustur()
+        layout.addWidget(self.tur_label)
+        layout.addWidget(self.favori_tur_tablo)
+        widget.setLayout(layout)
+        self._yukle_favori_tur()
+        return widget
+
+    def _yukle_favori_tur(self):
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("SELECT t.tur_id, t.tur_adi FROM kullanici_tur kt JOIN tur t ON kt.tur_id = t.tur_id WHERE kt.kullanici_id = %s LIMIT 3", (self.kullanici_id,))
+            turler = cursor.fetchall()
+            if not turler:
+                self.tur_label.setText("Favori türünüz bulunamadı!")
+                cursor.close()
+                conn.close()
+                return
+            self.tur_label.setText(f"📌 Kayıt sırasında seçtiğiniz türler: {', '.join([t[1] for t in turler])}")
+            tum_oneriler = []
+            eklenen_idler = set()
+            for tur_id, tur_adi in turler:
+                cursor.execute("""SELECT p.program_id, p.ad, %s, COALESCE(ROUND(AVG(pu.skor), 1), 0)
+                    FROM program p JOIN program_tur pt ON p.program_id = pt.program_id
+                    LEFT JOIN puan pu ON p.program_id = pu.program_id
+                    WHERE pt.tur_id = %s AND p.program_id NOT IN (
+                        SELECT program_id FROM izleme_gecmisi WHERE kullanici_id = %s)
+                    GROUP BY p.program_id ORDER BY AVG(pu.skor) DESC LIMIT 2""", (tur_adi, tur_id, self.kullanici_id))
+                for row in cursor.fetchall():
+                    if row[0] not in eklenen_idler:
+                        tum_oneriler.append(row)
+                        eklenen_idler.add(row[0])
+            cursor.close()
+            conn.close()
+            self._tablo_doldur(self.favori_tur_tablo, tum_oneriler)
+        except Exception as e:
+            print(f"Favori tür öneri hatası: {e}")
+
+    def _yuksek_puan_tur_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout()
+        layout.setContentsMargins(10, 10, 10, 10)
+        self.puan_tur_label = QLabel("")
+        self.puan_tur_label.setStyleSheet("color: #aaa; font-size: 12px; padding: 4px;")
+        self.puan_tur_label.setWordWrap(True)
+        self.puan_tur_tablo = self._tablo_olustur()
+        layout.addWidget(self.puan_tur_label)
+        layout.addWidget(self.puan_tur_tablo)
+        widget.setLayout(layout)
+        self._yukle_puan_tur()
+        return widget
+
+    def _yukle_puan_tur(self):
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("""SELECT DISTINCT t.tur_id, t.tur_adi FROM puan pu
+                JOIN program_tur pt ON pu.program_id = pt.program_id
+                JOIN tur t ON pt.tur_id = t.tur_id
+                WHERE pu.kullanici_id = %s AND pu.skor >= 7 LIMIT 3""", (self.kullanici_id,))
+            turler = cursor.fetchall()
+            if not turler:
+                self.puan_tur_label.setText("Henüz 7 ve üzeri puan verdiğiniz içerik yok.")
+                cursor.close()
+                conn.close()
+                return
+            self.puan_tur_label.setText(f"⭐ Yüksek puan verdiğiniz türler: {', '.join([t[1] for t in turler])}")
+            oneriler = []
+            eklenen_idler = set()
+            for tur_id, tur_adi in turler:
+                cursor.execute("""SELECT p.program_id, p.ad, %s, COALESCE(ROUND(AVG(pu2.skor), 1), 0)
+                    FROM program p JOIN program_tur pt ON p.program_id = pt.program_id
+                    LEFT JOIN puan pu2 ON p.program_id = pu2.program_id
+                    WHERE pt.tur_id = %s
+                    AND p.program_id NOT IN (SELECT program_id FROM izleme_gecmisi WHERE kullanici_id = %s)
+                    AND p.program_id NOT IN (SELECT program_id FROM puan WHERE kullanici_id = %s)
+                    GROUP BY p.program_id ORDER BY AVG(pu2.skor) DESC LIMIT 3""", (tur_adi, tur_id, self.kullanici_id, self.kullanici_id))
+                for row in cursor.fetchall():
+                    if row[0] not in eklenen_idler:
+                        oneriler.append(row)
+                        eklenen_idler.add(row[0])
+            cursor.close()
+            conn.close()
+            self._tablo_doldur(self.puan_tur_tablo, oneriler)
+        except Exception as e:
+            print(f"Puan tür öneri hatası: {e}")
+
+    def _en_cok_izlenen_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout()
+        layout.setContentsMargins(10, 10, 10, 10)
+        bilgi = QLabel("🔥 Platformdaki en çok izlenen içerikler:")
+        bilgi.setStyleSheet("color: #aaa; font-size: 12px; padding: 4px;")
+        self.en_cok_tablo = self._tablo_olustur()
+        layout.addWidget(bilgi)
+        layout.addWidget(self.en_cok_tablo)
+        widget.setLayout(layout)
+        self._yukle_en_cok_izlenen()
+        return widget
+
+    def _yukle_en_cok_izlenen(self):
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("""SELECT p.program_id, p.ad,
+                GROUP_CONCAT(DISTINCT t.tur_adi SEPARATOR ', '),
+                COALESCE(ROUND(AVG(pu.skor), 1), 0)
+                FROM program p
+                LEFT JOIN program_tur pt ON p.program_id = pt.program_id
+                LEFT JOIN tur t ON pt.tur_id = t.tur_id
+                LEFT JOIN puan pu ON p.program_id = pu.program_id
+                WHERE p.program_id NOT IN (SELECT program_id FROM izleme_gecmisi WHERE kullanici_id = %s)
+                GROUP BY p.program_id ORDER BY p.izlenme_sayisi DESC LIMIT 10""", (self.kullanici_id,))
+            rows = cursor.fetchall()
+            cursor.close()
+            conn.close()
+            self._tablo_doldur(self.en_cok_tablo, rows)
+        except Exception as e:
+            print(f"En çok izlenen öneri hatası: {e}")
+
+    def _benzer_kullanici_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout()
+        layout.setContentsMargins(10, 10, 10, 10)
+        self.benzer_label = QLabel("")
+        self.benzer_label.setStyleSheet("color: #aaa; font-size: 12px; padding: 4px;")
+        self.benzer_label.setWordWrap(True)
+        self.benzer_tablo = self._tablo_olustur()
+        layout.addWidget(self.benzer_label)
+        layout.addWidget(self.benzer_tablo)
+        widget.setLayout(layout)
+        self._yukle_benzer_kullanici()
+        return widget
+
+    def _yukle_benzer_kullanici(self):
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("""SELECT DISTINCT kt2.kullanici_id FROM kullanici_tur kt1
+                JOIN kullanici_tur kt2 ON kt1.tur_id = kt2.tur_id
+                WHERE kt1.kullanici_id = %s AND kt2.kullanici_id != %s LIMIT 5""", (self.kullanici_id, self.kullanici_id))
+            benzer_kullanicilar = [r[0] for r in cursor.fetchall()]
+            if not benzer_kullanicilar:
+                self.benzer_label.setText("Henüz benzer kullanıcı bulunamadı.")
+                cursor.close()
+                conn.close()
+                return
+            self.benzer_label.setText(f"👥 Sizinle aynı zevklere sahip {len(benzer_kullanicilar)} kullanıcının izledikleri:")
+            format_str = ",".join(["%s"] * len(benzer_kullanicilar))
+            cursor.execute(f"""SELECT p.program_id, p.ad,
+                GROUP_CONCAT(DISTINCT t.tur_adi SEPARATOR ', '),
+                COALESCE(ROUND(AVG(pu.skor), 1), 0)
+                FROM izleme_gecmisi ig JOIN program p ON ig.program_id = p.program_id
+                LEFT JOIN program_tur pt ON p.program_id = pt.program_id
+                LEFT JOIN tur t ON pt.tur_id = t.tur_id
+                LEFT JOIN puan pu ON p.program_id = pu.program_id
+                WHERE ig.kullanici_id IN ({format_str})
+                AND p.program_id NOT IN (SELECT program_id FROM izleme_gecmisi WHERE kullanici_id = %s)
+                GROUP BY p.program_id ORDER BY COUNT(ig.gecmis_id) DESC, AVG(pu.skor) DESC LIMIT 10""",
+                (*benzer_kullanicilar, self.kullanici_id))
+            rows = cursor.fetchall()
+            cursor.close()
+            conn.close()
+            self._tablo_doldur(self.benzer_tablo, rows)
+        except Exception as e:
+            print(f"Benzer kullanıcı öneri hatası: {e}")
+
+    def _tablo_doldur(self, tablo, rows):
+        tablo.setRowCount(len(rows))
+        for i, row in enumerate(rows):
+            sira = QTableWidgetItem(str(i + 1))
+            sira.setTextAlignment(Qt.AlignCenter)
+            tablo.setItem(i, 0, sira)
+            for j, val in enumerate(row[1:]):
+                puan_str = f"{val}/10 ⭐" if j == 2 and val and float(val) > 0 else str(val) if val else "-"
+                item = QTableWidgetItem(puan_str)
+                item.setTextAlignment(Qt.AlignCenter)
+                tablo.setItem(i, j + 1, item)
+
+    def detay_ac(self, tablo):
+        secili = tablo.currentRow()
+        if secili >= 0:
+            icerik_adi = tablo.item(secili, 1).text()
+            try:
+                conn = get_connection()
+                cursor = conn.cursor(buffered=True)
+                cursor.execute("SELECT program_id FROM program WHERE ad = %s", (icerik_adi,))
+                row = cursor.fetchone()
+                cursor.close()
+                conn.close()
+                if row:
+                    self.detay = DetayEkrani(row[0], icerik_adi, self.kullanici_id)
+                    self.detay.show()
+            except Exception as e:
+                print(f"Detay açma hatası: {e}")
+
+
+
+# ADMİN PANELİ
+
+class AdminEkrani(QWidget):
+    def __init__(self, kullanici_id):
+        super().__init__()
+        self.kullanici_id = kullanici_id
+        self.setWindowTitle("Netflix - Admin Paneli")
+        self.setMinimumSize(800, 600)
+        self.setStyleSheet("background-color: #141414; color: white;")
+        self.setup_ui()
+
+    def setup_ui(self):
+        ana_layout = QVBoxLayout()
+        ana_layout.setContentsMargins(20, 20, 20, 20)
+        baslik = QLabel("⚙️ Admin Paneli")
+        baslik.setStyleSheet("font-size: 20px; font-weight: bold; color: #E50914;")
+        baslik.setAlignment(Qt.AlignCenter)
+        oneri_btn = QPushButton("🎯 Bana Özel Öneriler")
+        oneri_btn.setStyleSheet("background: #333; color: white; padding: 8px; border-radius: 4px; font-size: 13px;")
+        oneri_btn.clicked.connect(self.oneriler_ac)
+        self.tabs = QTabWidget()
+        self.tabs.setStyleSheet("""
+            QTabWidget::pane { border: 1px solid #333; }
+            QTabBar::tab { background: #333; color: white; padding: 8px 16px; }
+            QTabBar::tab:selected { background: #E50914; }
+        """)
+        self.tabs.addTab(self.icerik_tab(), "🎬 İçerik Yönetimi")
+        self.tabs.addTab(self.tur_tab(), "🏷️ Tür Yönetimi")
+        self.tabs.addTab(self.kullanici_tab(), "👥 Kullanıcılar")
+        self.tabs.addTab(self.istatistik_tab(), "🏆 En Yüksek Puanlılar")
+        self.tabs.addTab(self.kullanici_istatistik_tab(), "📊 Kullanıcı İstatistikleri")
+        self.tabs.addTab(self.rapor_tab(), "📋 Raporlar")
+        ana_layout.addWidget(baslik)
+        ana_layout.addWidget(oneri_btn)
+        ana_layout.addWidget(self.tabs)
+        self.setLayout(ana_layout)
+
+    def oneriler_ac(self):
+        self.oneriler = OneriEkrani(self.kullanici_id)
+        self.oneriler.show()
+
+    def icerik_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout()
+        layout.setSpacing(10)
+        input_style = "padding: 6px; background: #333; color: white; border-radius: 4px;"
+        form_widget = QWidget()
+        form_layout = QHBoxLayout()
+        self.icerik_ad = QLineEdit()
+        self.icerik_ad.setPlaceholderText("İçerik Adı")
+        self.icerik_ad.setStyleSheet(input_style)
+        self.icerik_tip = QComboBox()
+        self.icerik_tip.addItems(["Film", "Dizi"])
+        self.icerik_tip.setStyleSheet(input_style)
+        self.icerik_yil = QLineEdit()
+        self.icerik_yil.setPlaceholderText("Yayın Yılı")
+        self.icerik_yil.setStyleSheet(input_style)
+        self.icerik_yil.setMaximumWidth(100)
+        ekle_btn = QPushButton("➕ Ekle")
+        ekle_btn.setStyleSheet("background: #28a745; color: white; padding: 6px 12px; border-radius: 4px;")
+        ekle_btn.clicked.connect(self.icerik_ekle)
+        form_layout.addWidget(self.icerik_ad)
+        form_layout.addWidget(self.icerik_tip)
+        form_layout.addWidget(self.icerik_yil)
+        form_layout.addWidget(ekle_btn)
+        form_widget.setLayout(form_layout)
+        self.icerik_tablo = QTableWidget()
+        self.icerik_tablo.setColumnCount(4)
+        self.icerik_tablo.setHorizontalHeaderLabels(["ID", "Ad", "Tip", "Yayın Yılı"])
+        self.icerik_tablo.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.icerik_tablo.setStyleSheet("background: #1a1a1a; color: white; gridline-color: #333;")
+        self.icerik_tablo.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.icerik_tablo.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.icerik_tablo.verticalHeader().setVisible(False)
+        buton_layout = QHBoxLayout()
+        guncelle_btn = QPushButton("✏️ Güncelle")
+        guncelle_btn.setStyleSheet("background: #ffc107; color: black; padding: 8px; border-radius: 4px;")
+        guncelle_btn.clicked.connect(self.icerik_guncelle)
+        sil_btn = QPushButton("🗑️ Sil")
+        sil_btn.setStyleSheet("background: #E50914; color: white; padding: 8px; border-radius: 4px;")
+        sil_btn.clicked.connect(self.icerik_sil)
+        buton_layout.addWidget(guncelle_btn)
+        buton_layout.addWidget(sil_btn)
+        self.icerik_sonuc = QLabel("")
+        self.icerik_sonuc.setAlignment(Qt.AlignCenter)
+        layout.addWidget(form_widget)
+        layout.addWidget(self.icerik_tablo)
+        layout.addLayout(buton_layout)
+        layout.addWidget(self.icerik_sonuc)
+        widget.setLayout(layout)
+        self.icerikleri_yukle()
+        return widget
+
+    def icerikleri_yukle(self):
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("SELECT program_id, ad, tip, yayin_yili FROM program ORDER BY ad")
+            rows = cursor.fetchall()
+            cursor.close()
+            conn.close()
+            self.icerik_tablo.setRowCount(len(rows))
+            for i, row in enumerate(rows):
+                for j, val in enumerate(row):
+                    item = QTableWidgetItem(str(val) if val else "")
+                    item.setTextAlignment(Qt.AlignCenter)
+                    self.icerik_tablo.setItem(i, j, item)
+        except Exception as e:
+            print(f"İçerik yükleme hatası: {e}")
+
+    def icerik_ekle(self):
+        ad = self.icerik_ad.text().strip()
+        tip = self.icerik_tip.currentText()
+        yil = self.icerik_yil.text().strip()
+        if not ad:
+            self.icerik_sonuc.setStyleSheet("color: red;")
+            self.icerik_sonuc.setText("İçerik adı boş olamaz!")
+            return
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("INSERT INTO program (ad, tip, yayin_yili) VALUES (%s, %s, %s)", (ad, tip, yil if yil else None))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            self.icerik_ad.clear()
+            self.icerik_yil.clear()
+            self.icerik_sonuc.setStyleSheet("color: green;")
+            self.icerik_sonuc.setText(f"'{ad}' eklendi!")
+            self.icerikleri_yukle()
+        except Exception as e:
+            self.icerik_sonuc.setText(f"Hata: {e}")
+
+    def icerik_guncelle(self):
+        secili = self.icerik_tablo.currentRow()
+        if secili < 0:
+            self.icerik_sonuc.setStyleSheet("color: red;")
+            self.icerik_sonuc.setText("Lütfen bir içerik seçin!")
+            return
+        program_id = int(self.icerik_tablo.item(secili, 0).text())
+        mevcut_ad = self.icerik_tablo.item(secili, 1).text()
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("SELECT ad, yayin_yili, aciklama, bolum_sayisi FROM program WHERE program_id=%s", (program_id,))
+            row = cursor.fetchone()
+            cursor.close()
+            conn.close()
+        except Exception as e:
+            self.icerik_sonuc.setText(f"Hata: {e}")
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Güncelle — {mevcut_ad}")
+        dialog.setFixedSize(420, 340)
+        dialog.setStyleSheet("background-color: #141414; color: white;")
+        dlayout = QVBoxLayout()
+        dlayout.setSpacing(8)
+        dlayout.setContentsMargins(20, 20, 20, 20)
+        input_style = "padding: 6px; background: #333; color: white; border-radius: 4px;"
+        label_style = "color: #aaa; font-size: 12px;"
+        ad_label = QLabel("İçerik Adı:")
+        ad_label.setStyleSheet(label_style)
+        ad_input = QLineEdit(row[0] or "")
+        ad_input.setStyleSheet(input_style)
+        yil_label = QLabel("Yayın Yılı:")
+        yil_label.setStyleSheet(label_style)
+        yil_input = QLineEdit(str(row[1]) if row[1] else "")
+        yil_input.setStyleSheet(input_style)
+        aciklama_label = QLabel("Açıklama:")
+        aciklama_label.setStyleSheet(label_style)
+        aciklama_input = QTextEdit()
+        aciklama_input.setStyleSheet("background: #333; color: white; border-radius: 4px; padding: 4px;")
+        aciklama_input.setMaximumHeight(80)
+        if row[2]:
+            aciklama_input.setText(row[2])
+        bolum_label = QLabel("Bölüm Sayısı:")
+        bolum_label.setStyleSheet(label_style)
+        bolum_input = QLineEdit(str(row[3]) if row[3] else "")
+        bolum_input.setStyleSheet(input_style)
+        kaydet_btn = QPushButton("💾 Kaydet")
+        kaydet_btn.setStyleSheet("background: #E50914; color: white; padding: 8px; border-radius: 4px; font-weight: bold;")
+        dlayout.addWidget(ad_label)
+        dlayout.addWidget(ad_input)
+        dlayout.addWidget(yil_label)
+        dlayout.addWidget(yil_input)
+        dlayout.addWidget(aciklama_label)
+        dlayout.addWidget(aciklama_input)
+        dlayout.addWidget(bolum_label)
+        dlayout.addWidget(bolum_input)
+        dlayout.addWidget(kaydet_btn)
+        dialog.setLayout(dlayout)
+        def kaydet():
+            try:
+                conn = get_connection()
+                cursor = conn.cursor(buffered=True)
+                cursor.execute("UPDATE program SET ad=%s, yayin_yili=%s, aciklama=%s, bolum_sayisi=%s WHERE program_id=%s",
+                    (ad_input.text().strip(),
+                     int(yil_input.text()) if yil_input.text().strip() else None,
+                     aciklama_input.toPlainText().strip(),
+                     int(bolum_input.text()) if bolum_input.text().strip() else None,
+                     program_id))
+                conn.commit()
+                cursor.close()
+                conn.close()
+                self.icerik_sonuc.setStyleSheet("color: green;")
+                self.icerik_sonuc.setText("İçerik güncellendi!")
+                self.icerikleri_yukle()
+                dialog.close()
+            except Exception as e:
+                self.icerik_sonuc.setStyleSheet("color: red;")
+                self.icerik_sonuc.setText(f"Hata: {e}")
+        kaydet_btn.clicked.connect(kaydet)
+        dialog.exec_()
+
+    def icerik_sil(self):
+        secili = self.icerik_tablo.currentRow()
+        if secili < 0:
+            self.icerik_sonuc.setStyleSheet("color: red;")
+            self.icerik_sonuc.setText("Lütfen bir içerik seçin!")
+            return
+        program_id = int(self.icerik_tablo.item(secili, 0).text())
+        ad = self.icerik_tablo.item(secili, 1).text()
+        cevap = QMessageBox.question(self, "Emin misiniz?", f"'{ad}' silinecek!", QMessageBox.Yes | QMessageBox.No)
+        if cevap == QMessageBox.Yes:
+            try:
+                conn = get_connection()
+                cursor = conn.cursor(buffered=True)
+                for tbl in ["program_tur", "favori", "izleme_gecmisi", "puan"]:
+                    cursor.execute(f"DELETE FROM {tbl} WHERE program_id=%s", (program_id,))
+                cursor.execute("DELETE FROM program WHERE program_id=%s", (program_id,))
+                conn.commit()
+                cursor.close()
+                conn.close()
+                self.icerik_sonuc.setStyleSheet("color: green;")
+                self.icerik_sonuc.setText(f"'{ad}' silindi!")
+                self.icerikleri_yukle()
+            except Exception as e:
+                self.icerik_sonuc.setText(f"Hata: {e}")
+
+    def tur_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout()
+        layout.setSpacing(10)
+        input_style = "padding: 6px; background: #333; color: white; border-radius: 4px;"
+        form_widget = QWidget()
+        form_layout = QHBoxLayout()
+        self.tur_ad_input = QLineEdit()
+        self.tur_ad_input.setPlaceholderText("Yeni Tür Adı")
+        self.tur_ad_input.setStyleSheet(input_style)
+        tur_ekle_btn = QPushButton("➕ Tür Ekle")
+        tur_ekle_btn.setStyleSheet("background: #28a745; color: white; padding: 6px 12px; border-radius: 4px;")
+        tur_ekle_btn.clicked.connect(self.tur_ekle)
+        form_layout.addWidget(self.tur_ad_input)
+        form_layout.addWidget(tur_ekle_btn)
+        form_widget.setLayout(form_layout)
+        self.tur_tablo = QTableWidget()
+        self.tur_tablo.setColumnCount(2)
+        self.tur_tablo.setHorizontalHeaderLabels(["ID", "Tür Adı"])
+        self.tur_tablo.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.tur_tablo.setStyleSheet("background: #1a1a1a; color: white; gridline-color: #333;")
+        self.tur_tablo.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.tur_tablo.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.tur_tablo.verticalHeader().setVisible(False)
+        buton_layout = QHBoxLayout()
+        tur_guncelle_btn = QPushButton("✏️ Güncelle")
+        tur_guncelle_btn.setStyleSheet("background: #ffc107; color: black; padding: 8px; border-radius: 4px;")
+        tur_guncelle_btn.clicked.connect(self.tur_guncelle)
+        tur_sil_btn = QPushButton("🗑️ Sil")
+        tur_sil_btn.setStyleSheet("background: #E50914; color: white; padding: 8px; border-radius: 4px;")
+        tur_sil_btn.clicked.connect(self.tur_sil)
+        buton_layout.addWidget(tur_guncelle_btn)
+        buton_layout.addWidget(tur_sil_btn)
+        self.tur_sonuc = QLabel("")
+        self.tur_sonuc.setAlignment(Qt.AlignCenter)
+        layout.addWidget(form_widget)
+        layout.addWidget(self.tur_tablo)
+        layout.addLayout(buton_layout)
+        layout.addWidget(self.tur_sonuc)
+        widget.setLayout(layout)
+        self.turleri_yukle()
+        return widget
+
+    def turleri_yukle(self):
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("SELECT tur_id, tur_adi FROM tur ORDER BY tur_adi")
+            rows = cursor.fetchall()
+            cursor.close()
+            conn.close()
+            self.tur_tablo.setRowCount(len(rows))
+            for i, row in enumerate(rows):
+                for j, val in enumerate(row):
+                    item = QTableWidgetItem(str(val) if val else "")
+                    item.setTextAlignment(Qt.AlignCenter)
+                    self.tur_tablo.setItem(i, j, item)
+        except Exception as e:
+            print(f"Tür yükleme hatası: {e}")
+
+    def tur_ekle(self):
+        ad = self.tur_ad_input.text().strip()
+        if not ad:
+            self.tur_sonuc.setStyleSheet("color: red;")
+            self.tur_sonuc.setText("Tür adı boş olamaz!")
+            return
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("INSERT IGNORE INTO tur (tur_adi) VALUES (%s)", (ad,))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            self.tur_ad_input.clear()
+            self.tur_sonuc.setStyleSheet("color: green;")
+            self.tur_sonuc.setText(f"'{ad}' türü eklendi!")
+            self.turleri_yukle()
+        except Exception as e:
+            self.tur_sonuc.setText(f"Hata: {e}")
+
+    def tur_guncelle(self):
+        secili = self.tur_tablo.currentRow()
+        if secili < 0:
+            self.tur_sonuc.setStyleSheet("color: red;")
+            self.tur_sonuc.setText("Lütfen bir tür seçin!")
+            return
+        tur_id = int(self.tur_tablo.item(secili, 0).text())
+        mevcut_ad = self.tur_tablo.item(secili, 1).text()
+        yeni_ad, ok = QInputDialog.getText(self, "Güncelle", "Yeni tür adı:", text=mevcut_ad)
+        if ok and yeni_ad.strip():
+            try:
+                conn = get_connection()
+                cursor = conn.cursor(buffered=True)
+                cursor.execute("UPDATE tur SET tur_adi=%s WHERE tur_id=%s", (yeni_ad.strip(), tur_id))
+                conn.commit()
+                cursor.close()
+                conn.close()
+                self.tur_sonuc.setStyleSheet("color: green;")
+                self.tur_sonuc.setText("Tür güncellendi!")
+                self.turleri_yukle()
+            except Exception as e:
+                self.tur_sonuc.setText(f"Hata: {e}")
+
+    def tur_sil(self):
+        secili = self.tur_tablo.currentRow()
+        if secili < 0:
+            self.tur_sonuc.setStyleSheet("color: red;")
+            self.tur_sonuc.setText("Lütfen bir tür seçin!")
+            return
+        tur_id = int(self.tur_tablo.item(secili, 0).text())
+        ad = self.tur_tablo.item(secili, 1).text()
+        cevap = QMessageBox.question(self, "Emin misiniz?", f"'{ad}' türü silinecek!", QMessageBox.Yes | QMessageBox.No)
+        if cevap == QMessageBox.Yes:
+            try:
+                conn = get_connection()
+                cursor = conn.cursor(buffered=True)
+                cursor.execute("DELETE FROM program_tur WHERE tur_id=%s", (tur_id,))
+                cursor.execute("DELETE FROM kullanici_tur WHERE tur_id=%s", (tur_id,))
+                cursor.execute("DELETE FROM tur WHERE tur_id=%s", (tur_id,))
+                conn.commit()
+                cursor.close()
+                conn.close()
+                self.tur_sonuc.setStyleSheet("color: green;")
+                self.tur_sonuc.setText(f"'{ad}' silindi!")
+                self.turleri_yukle()
+            except Exception as e:
+                self.tur_sonuc.setText(f"Hata: {e}")
+
+    def kullanici_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout()
+        self.kullanici_tablo = QTableWidget()
+        self.kullanici_tablo.setColumnCount(5)
+        self.kullanici_tablo.setHorizontalHeaderLabels(["ID", "Ad", "Soyad", "Email", "Rol"])
+        self.kullanici_tablo.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+        self.kullanici_tablo.setStyleSheet("background: #1a1a1a; color: white; gridline-color: #333;")
+        self.kullanici_tablo.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.kullanici_tablo.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.kullanici_tablo.verticalHeader().setVisible(False)
+        buton_layout = QHBoxLayout()
+        detay_btn = QPushButton("👁️ Kullanıcı Detayı")
+        detay_btn.setStyleSheet("background: #333; color: white; padding: 8px; border-radius: 4px;")
+        detay_btn.clicked.connect(self.kullanici_detay)
+        sil_btn = QPushButton("🗑️ Kullanıcıyı Sil")
+        sil_btn.setStyleSheet("background: #E50914; color: white; padding: 8px; border-radius: 4px;")
+        sil_btn.clicked.connect(self.kullanici_sil)
+        buton_layout.addWidget(detay_btn)
+        buton_layout.addWidget(sil_btn)
+        self.kullanici_sonuc = QLabel("")
+        self.kullanici_sonuc.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.kullanici_tablo)
+        layout.addLayout(buton_layout)
+        layout.addWidget(self.kullanici_sonuc)
+        widget.setLayout(layout)
+        self.kullanicilari_yukle()
+        return widget
+
+    def kullanicilari_yukle(self):
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("""SELECT k.kullanici_id, k.ad, k.soyad, k.email, r.rol_adi
+                FROM kullanici k LEFT JOIN rol r ON k.rol_id = r.rol_id ORDER BY k.kullanici_id""")
+            rows = cursor.fetchall()
+            cursor.close()
+            conn.close()
+            self.kullanici_tablo.setRowCount(len(rows))
+            for i, row in enumerate(rows):
+                for j, val in enumerate(row):
+                    item = QTableWidgetItem(str(val) if val else "")
+                    item.setTextAlignment(Qt.AlignCenter)
+                    self.kullanici_tablo.setItem(i, j, item)
+        except Exception as e:
+            print(f"Kullanıcı yükleme hatası: {e}")
+
+    def kullanici_detay(self):
+        secili = self.kullanici_tablo.currentRow()
+        if secili < 0:
+            self.kullanici_sonuc.setStyleSheet("color: red;")
+            self.kullanici_sonuc.setText("Lütfen bir kullanıcı seçin!")
+            return
+        kullanici_id = int(self.kullanici_tablo.item(secili, 0).text())
+        ad = self.kullanici_tablo.item(secili, 1).text()
+        soyad = self.kullanici_tablo.item(secili, 2).text()
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("""SELECT k.ad, k.soyad, k.email, k.dogum_tarihi, k.cinsiyet, k.ulke, r.rol_adi
+                FROM kullanici k LEFT JOIN rol r ON k.rol_id = r.rol_id WHERE k.kullanici_id = %s""", (kullanici_id,))
+            kullanici = cursor.fetchone()
+            cursor.execute("""SELECT t.tur_adi FROM kullanici_tur kt JOIN tur t ON kt.tur_id = t.tur_id WHERE kt.kullanici_id = %s""", (kullanici_id,))
+            turler = [r[0] for r in cursor.fetchall()]
+            cursor.execute("""SELECT p.ad, p.tip, DATE_FORMAT(ig.son_izleme, '%d/%m/%Y %H:%i'),
+                IF(ig.tamamlandi, 'Tamamlandı', 'Devam Ediyor'), ig.kalinan_sure
+                FROM izleme_gecmisi ig JOIN program p ON ig.program_id = p.program_id
+                WHERE ig.kullanici_id = %s ORDER BY ig.son_izleme DESC""", (kullanici_id,))
+            gecmis = cursor.fetchall()
+            cursor.execute("SELECT COALESCE(SUM(kalinan_sure), 0) FROM izleme_gecmisi WHERE kullanici_id = %s", (kullanici_id,))
+            toplam_sure = cursor.fetchone()[0]
+            cursor.close()
+            conn.close()
+            dialog = QDialog(self)
+            dialog.setWindowTitle(f"Kullanıcı Detayı — {ad} {soyad}")
+            dialog.setMinimumSize(650, 500)
+            dialog.setStyleSheet("background-color: #141414; color: white;")
+            dlayout = QVBoxLayout()
+            dlayout.setContentsMargins(20, 20, 20, 20)
+            dlayout.setSpacing(10)
+            dogum = kullanici[3].strftime("%d/%m/%Y") if kullanici[3] else "Belirtilmemiş"
+            dk, sn = toplam_sure // 60, toplam_sure % 60
+            bilgi_label = QLabel(
+                f"👤 {kullanici[0]} {kullanici[1]}  |  📧 {kullanici[2]}\n"
+                f"🎂 Doğum: {dogum}  |  ⚧ {kullanici[4] or '-'}  |  🌍 {kullanici[5] or '-'}\n"
+                f"🎭 Favori Türler: {', '.join(turler) if turler else 'Belirtilmemiş'}\n"
+                f"⏱️ Toplam İzleme Süresi: {dk} dk {sn} sn"
+            )
+            bilgi_label.setStyleSheet("color: #ccc; font-size: 12px; background: #1a1a1a; padding: 10px; border-radius: 4px;")
+            bilgi_label.setWordWrap(True)
+            gecmis_baslik = QLabel("📺 İzleme Geçmişi")
+            gecmis_baslik.setStyleSheet("color: #E50914; font-size: 14px; font-weight: bold;")
+            tablo = QTableWidget()
+            tablo.setColumnCount(5)
+            tablo.setHorizontalHeaderLabels(["İçerik", "Tip", "Son İzleme", "Durum", "Süre"])
+            tablo.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+            tablo.setStyleSheet("background: #1a1a1a; color: white; gridline-color: #333;")
+            tablo.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            tablo.verticalHeader().setVisible(False)
+            tablo.setRowCount(len(gecmis))
+            for i, row in enumerate(gecmis):
+                sure_sn = row[4] or 0
+                veriler = [row[0], row[1], row[2], row[3], f"{sure_sn//60}dk {sure_sn%60}sn"]
+                for j, val in enumerate(veriler):
+                    item = QTableWidgetItem(str(val) if val else "")
+                    item.setTextAlignment(Qt.AlignCenter)
+                    tablo.setItem(i, j, item)
+            kapat_btn = QPushButton("✖ Kapat")
+            kapat_btn.setStyleSheet("background: #333; color: white; padding: 8px; border-radius: 4px;")
+            kapat_btn.clicked.connect(dialog.close)
+            dlayout.addWidget(bilgi_label)
+            dlayout.addWidget(gecmis_baslik)
+            dlayout.addWidget(tablo)
+            dlayout.addWidget(kapat_btn)
+            dialog.setLayout(dlayout)
+            dialog.exec_()
+        except Exception as e:
+            self.kullanici_sonuc.setStyleSheet("color: red;")
+            self.kullanici_sonuc.setText(f"Hata: {e}")
+
+    def kullanici_sil(self):
+        secili = self.kullanici_tablo.currentRow()
+        if secili < 0:
+            self.kullanici_sonuc.setStyleSheet("color: red;")
+            self.kullanici_sonuc.setText("Lütfen bir kullanıcı seçin!")
+            return
+        kullanici_id = int(self.kullanici_tablo.item(secili, 0).text())
+        ad = self.kullanici_tablo.item(secili, 1).text()
+        cevap = QMessageBox.question(self, "Emin misiniz?", f"'{ad}' silinecek!", QMessageBox.Yes | QMessageBox.No)
+        if cevap == QMessageBox.Yes:
+            try:
+                conn = get_connection()
+                cursor = conn.cursor(buffered=True)
+                for tbl in ["favori", "izleme_gecmisi", "puan", "kullanici_tur"]:
+                    cursor.execute(f"DELETE FROM {tbl} WHERE kullanici_id=%s", (kullanici_id,))
+                cursor.execute("DELETE FROM kullanici WHERE kullanici_id=%s", (kullanici_id,))
+                conn.commit()
+                cursor.close()
+                conn.close()
+                self.kullanici_sonuc.setStyleSheet("color: green;")
+                self.kullanici_sonuc.setText(f"'{ad}' silindi!")
+                self.kullanicilari_yukle()
+            except Exception as e:
+                self.kullanici_sonuc.setText(f"Hata: {e}")
+
+    def istatistik_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout()
+        layout.setSpacing(10)
+        layout.setContentsMargins(15, 15, 15, 15)
+        baslik = QLabel("🏆 En Yüksek Puan Alan İçerikler")
+        baslik.setStyleSheet("font-size: 16px; font-weight: bold; color: #f5c518;")
+        baslik.setAlignment(Qt.AlignCenter)
+        yenile_btn = QPushButton("🔄 Yenile")
+        yenile_btn.setStyleSheet("background: #333; color: white; padding: 6px 12px; border-radius: 4px;")
+        yenile_btn.clicked.connect(self.istatistik_yukle)
+        self.istatistik_tablo = QTableWidget()
+        self.istatistik_tablo.setColumnCount(5)
+        self.istatistik_tablo.setHorizontalHeaderLabels(["Sıra", "İçerik Adı", "Tip", "Ort. Puan", "Puan Sayısı"])
+        self.istatistik_tablo.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.istatistik_tablo.setStyleSheet("background: #1a1a1a; color: white; gridline-color: #333;")
+        self.istatistik_tablo.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.istatistik_tablo.verticalHeader().setVisible(False)
+        layout.addWidget(baslik)
+        layout.addWidget(yenile_btn)
+        layout.addWidget(self.istatistik_tablo)
+        widget.setLayout(layout)
+        self.istatistik_yukle()
+        return widget
+
+    def istatistik_yukle(self):
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("""SELECT p.ad, p.tip, ROUND(AVG(pu.skor), 1) as ort_puan, COUNT(pu.puan_id) as puan_sayisi
+                FROM program p INNER JOIN puan pu ON p.program_id = pu.program_id
+                GROUP BY p.program_id HAVING puan_sayisi > 0
+                ORDER BY ort_puan DESC, puan_sayisi DESC LIMIT 20""")
+            rows = cursor.fetchall()
+            cursor.close()
+            conn.close()
+            self.istatistik_tablo.setRowCount(len(rows))
+            for i, row in enumerate(rows):
+                sira = QTableWidgetItem(f"#{i+1}")
+                sira.setTextAlignment(Qt.AlignCenter)
+                if i == 0: sira.setForeground(QColor('#FFD700'))
+                elif i == 1: sira.setForeground(QColor('#C0C0C0'))
+                elif i == 2: sira.setForeground(QColor('#CD7F32'))
+                self.istatistik_tablo.setItem(i, 0, sira)
+                for j, val in enumerate(row):
+                    item = QTableWidgetItem(str(val) if val else "")
+                    item.setTextAlignment(Qt.AlignCenter)
+                    self.istatistik_tablo.setItem(i, j + 1, item)
+        except Exception as e:
+            print(f"İstatistik yükleme hatası: {e}")
+
+    def kullanici_istatistik_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout()
+        layout.setSpacing(10)
+        layout.setContentsMargins(15, 15, 15, 15)
+        baslik = QLabel("📊 Kullanıcı İzleme İstatistikleri")
+        baslik.setStyleSheet("font-size: 16px; font-weight: bold; color: #E50914;")
+        baslik.setAlignment(Qt.AlignCenter)
+        yenile_btn = QPushButton("🔄 Yenile")
+        yenile_btn.setStyleSheet("background: #333; color: white; padding: 6px 12px; border-radius: 4px;")
+        yenile_btn.clicked.connect(self.kullanici_istatistik_yukle)
+        self.kullanici_ist_tablo = QTableWidget()
+        self.kullanici_ist_tablo.setColumnCount(5)
+        self.kullanici_ist_tablo.setHorizontalHeaderLabels(["Kullanıcı", "Email", "İzleme Sayısı", "Favori Sayısı", "Verdiği Puan Sayısı"])
+        self.kullanici_ist_tablo.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.kullanici_ist_tablo.setStyleSheet("background: #1a1a1a; color: white; gridline-color: #333;")
+        self.kullanici_ist_tablo.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.kullanici_ist_tablo.verticalHeader().setVisible(False)
+        layout.addWidget(baslik)
+        layout.addWidget(yenile_btn)
+        layout.addWidget(self.kullanici_ist_tablo)
+        widget.setLayout(layout)
+        self.kullanici_istatistik_yukle()
+        return widget
+
+    def kullanici_istatistik_yukle(self):
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("""SELECT CONCAT(k.ad, ' ', k.soyad), k.email,
+                COUNT(DISTINCT ig.program_id), COUNT(DISTINCT f.program_id), COUNT(DISTINCT p.program_id)
+                FROM kullanici k
+                LEFT JOIN izleme_gecmisi ig ON k.kullanici_id = ig.kullanici_id
+                LEFT JOIN favori f ON k.kullanici_id = f.kullanici_id
+                LEFT JOIN puan p ON k.kullanici_id = p.kullanici_id
+                WHERE k.rol_id = 2 GROUP BY k.kullanici_id ORDER BY COUNT(DISTINCT ig.program_id) DESC""")
+            rows = cursor.fetchall()
+            cursor.close()
+            conn.close()
+            self.kullanici_ist_tablo.setRowCount(len(rows))
+            for i, row in enumerate(rows):
+                for j, val in enumerate(row):
+                    item = QTableWidgetItem(str(val) if val else "0")
+                    item.setTextAlignment(Qt.AlignCenter)
+                    self.kullanici_ist_tablo.setItem(i, j, item)
+        except Exception as e:
+            print(f"Kullanıcı istatistik hatası: {e}")
+
+    def rapor_tab(self):
+        widget = QWidget()
+        ana_layout = QVBoxLayout()
+        ana_layout.setContentsMargins(10, 10, 10, 10)
+        ana_layout.setSpacing(10)
+        ozet_widget = QWidget()
+        ozet_widget.setStyleSheet("background: #1a1a1a; border-radius: 6px; padding: 10px;")
+        ozet_layout = QHBoxLayout()
+        self.kullanici_sayi_label = QLabel("👥 Kullanıcı: -")
+        self.kullanici_sayi_label.setStyleSheet("color: white; font-size: 14px; font-weight: bold;")
+        self.kullanici_sayi_label.setAlignment(Qt.AlignCenter)
+        self.izlenme_sayi_label = QLabel("🎬 Toplam İzlenme: -")
+        self.izlenme_sayi_label.setStyleSheet("color: white; font-size: 14px; font-weight: bold;")
+        self.izlenme_sayi_label.setAlignment(Qt.AlignCenter)
+        self.puan_sayi_label = QLabel("⭐ Toplam Puan: -")
+        self.puan_sayi_label.setStyleSheet("color: white; font-size: 14px; font-weight: bold;")
+        self.puan_sayi_label.setAlignment(Qt.AlignCenter)
+        ozet_layout.addWidget(self.kullanici_sayi_label)
+        ozet_layout.addWidget(self.izlenme_sayi_label)
+        ozet_layout.addWidget(self.puan_sayi_label)
+        ozet_widget.setLayout(ozet_layout)
+        rapor_tabs = QTabWidget()
+        rapor_tabs.setStyleSheet("""
+            QTabWidget::pane { border: 1px solid #333; }
+            QTabBar::tab { background: #222; color: white; padding: 6px 12px; }
+            QTabBar::tab:selected { background: #555; }
+        """)
+        rapor_tabs.addTab(self._en_cok_izlenen_tab(), "🎬 En Çok İzlenen 10")
+        rapor_tabs.addTab(self._en_yuksek_puan_tab(), "⭐ En Yüksek Puanlı 10")
+        rapor_tabs.addTab(self._en_cok_tur_tab(), "🏷️ En Çok İzlenen Türler")
+        rapor_tabs.addTab(self._en_aktif_tab(), "👥 En Aktif Kullanıcılar")
+        rapor_tabs.addTab(self._son_7_gun_tab(), "📅 Son 7 Gün")
+        yenile_btn = QPushButton("🔄 Tüm Raporları Yenile")
+        yenile_btn.setStyleSheet("background: #E50914; color: white; padding: 8px; border-radius: 4px; font-weight: bold;")
+        yenile_btn.clicked.connect(self.raporlari_yukle)
+        ana_layout.addWidget(ozet_widget)
+        ana_layout.addWidget(rapor_tabs)
+        ana_layout.addWidget(yenile_btn)
+        widget.setLayout(ana_layout)
+        self.rapor_tabs = rapor_tabs
+        self.raporlari_yukle()
+        return widget
+
+    def _tablo_olustur_rapor(self, basliklar):
+        tablo = QTableWidget()
+        tablo.setColumnCount(len(basliklar))
+        tablo.setHorizontalHeaderLabels(basliklar)
+        tablo.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        tablo.setStyleSheet("background: #1a1a1a; color: white; gridline-color: #333;")
+        tablo.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        tablo.verticalHeader().setVisible(False)
+        return tablo
+
+    def _en_cok_izlenen_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout()
+        self.en_cok_izlenen_tablo = self._tablo_olustur_rapor(["İçerik Adı", "Tip", "İzlenme Sayısı"])
+        layout.addWidget(self.en_cok_izlenen_tablo)
+        widget.setLayout(layout)
+        return widget
+
+    def _en_yuksek_puan_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout()
+        self.en_yuksek_puan_tablo = self._tablo_olustur_rapor(["İçerik Adı", "Tip", "Ort. Puan", "Puan Sayısı"])
+        layout.addWidget(self.en_yuksek_puan_tablo)
+        widget.setLayout(layout)
+        return widget
+
+    def _en_cok_tur_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout()
+        self.en_cok_tur_tablo = self._tablo_olustur_rapor(["Tür Adı", "İzlenme Sayısı"])
+        layout.addWidget(self.en_cok_tur_tablo)
+        widget.setLayout(layout)
+        return widget
+
+    def _en_aktif_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout()
+        self.en_aktif_tablo = self._tablo_olustur_rapor(["Kullanıcı", "Email", "İzleme Sayısı", "Favori", "Puan"])
+        layout.addWidget(self.en_aktif_tablo)
+        widget.setLayout(layout)
+        return widget
+
+    def _son_7_gun_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout()
+        self.son_7_gun_tablo = self._tablo_olustur_rapor(["İçerik Adı", "Tip", "İzleyen", "Son İzleme"])
+        layout.addWidget(self.son_7_gun_tablo)
+        widget.setLayout(layout)
+        return widget
+
+    def raporlari_yukle(self):
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(buffered=True)
+            cursor.execute("SELECT COUNT(*) FROM kullanici WHERE rol_id=2")
+            self.kullanici_sayi_label.setText(f"👥 Kullanıcı: {cursor.fetchone()[0]}")
+            cursor.execute("SELECT COUNT(*) FROM izleme_gecmisi")
+            self.izlenme_sayi_label.setText(f"🎬 Toplam İzlenme: {cursor.fetchone()[0]}")
+            cursor.execute("SELECT COUNT(*) FROM puan")
+            self.puan_sayi_label.setText(f"⭐ Toplam Puan: {cursor.fetchone()[0]}")
+            cursor.execute("SELECT p.ad, p.tip, p.izlenme_sayisi FROM program p ORDER BY p.izlenme_sayisi DESC LIMIT 10")
+            self._rapor_tablo_doldur(self.en_cok_izlenen_tablo, cursor.fetchall())
+            cursor.execute("""SELECT p.ad, p.tip, ROUND(AVG(pu.skor), 1), COUNT(pu.puan_id)
+                FROM program p INNER JOIN puan pu ON p.program_id = pu.program_id
+                GROUP BY p.program_id HAVING COUNT(pu.puan_id) > 0
+                ORDER BY AVG(pu.skor) DESC LIMIT 10""")
+            self._rapor_tablo_doldur(self.en_yuksek_puan_tablo, cursor.fetchall())
+            cursor.execute("""SELECT t.tur_adi, COUNT(ig.gecmis_id) as izlenme
+                FROM tur t JOIN program_tur pt ON t.tur_id = pt.tur_id
+                JOIN izleme_gecmisi ig ON pt.program_id = ig.program_id
+                GROUP BY t.tur_id ORDER BY izlenme DESC LIMIT 10""")
+            self._rapor_tablo_doldur(self.en_cok_tur_tablo, cursor.fetchall())
+            cursor.execute("""SELECT CONCAT(k.ad, ' ', k.soyad), k.email,
+                COUNT(DISTINCT ig.program_id), COUNT(DISTINCT f.program_id), COUNT(DISTINCT pu.puan_id)
+                FROM kullanici k
+                LEFT JOIN izleme_gecmisi ig ON k.kullanici_id = ig.kullanici_id
+                LEFT JOIN favori f ON k.kullanici_id = f.kullanici_id
+                LEFT JOIN puan pu ON k.kullanici_id = pu.kullanici_id
+                WHERE k.rol_id = 2 GROUP BY k.kullanici_id
+                ORDER BY COUNT(DISTINCT ig.program_id) DESC LIMIT 10""")
+            self._rapor_tablo_doldur(self.en_aktif_tablo, cursor.fetchall())
+            cursor.execute("""SELECT p.ad, p.tip, CONCAT(k.ad, ' ', k.soyad),
+                DATE_FORMAT(ig.son_izleme, '%d/%m/%Y %H:%i')
+                FROM izleme_gecmisi ig
+                JOIN program p ON ig.program_id = p.program_id
+                JOIN kullanici k ON ig.kullanici_id = k.kullanici_id
+                WHERE ig.son_izleme >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+                ORDER BY ig.son_izleme DESC""")
+            self._rapor_tablo_doldur(self.son_7_gun_tablo, cursor.fetchall())
+            cursor.close()
+            conn.close()
+        except Exception as e:
+            print(f"Rapor yükleme hatası: {e}")
+
+    def _rapor_tablo_doldur(self, tablo, rows):
+        tablo.setRowCount(len(rows))
+        for i, row in enumerate(rows):
+            for j, val in enumerate(row):
+                item = QTableWidgetItem(str(val) if val is not None else "0")
+                item.setTextAlignment(Qt.AlignCenter)
+                tablo.setItem(i, j, item)
+
+
+
+# UYGULAMA BAŞLAT
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    pencere = LoginEkrani()
+    pencere.show()
+    sys.exit(app.exec_())
